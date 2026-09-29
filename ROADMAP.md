@@ -3,7 +3,6 @@
 ## Now
 
 - Review active conversation, sidebar, Settings, and design-token consistency against the running app.
-- Evaluate project and output classification against realistic prompts.
 - Review the Website output for usability and factual accuracy across more live revisions.
 
 ## Next
@@ -29,5 +28,6 @@
 - Rust-enforced execution and approval policy with exact, one-use action grants.
 - First-class output definitions and modules; no additional output workflow was added.
 - Tool activity persists with its saved user message; the UI shows concise activity without raw debug data.
+- Realistic project and Auto output intent regressions cover explicit artifacts, informational questions, ambiguous projects, and weak new-folder signals.
 - Private GitHub repository and macOS CI workflow created.
 - 10 frontend and 51 Rust tests, frontend build, formatting, Clippy, and packaged app build pass. External distribution remains unsigned/unnotarized.

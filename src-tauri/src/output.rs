@@ -112,8 +112,12 @@ impl OutputType {
             .split(|c: char| !c.is_alphanumeric())
             .filter(|word| !word.is_empty())
             .collect::<Vec<_>>();
-        let has = |needle: &str| words.contains(&needle);
-        let request = [
+        if words.first().is_some_and(|word| {
+            matches!(*word, "what" | "why" | "how" | "when" | "where" | "should")
+        }) {
+            return Self::Chat;
+        }
+        let request_verbs = [
             "build",
             "create",
             "make",
@@ -124,50 +128,49 @@ impl OutputType {
             "produce",
             "draw",
             "illustrate",
-        ]
-        .iter()
-        .any(|verb| has(verb));
-        if !request {
+            "want",
+            "need",
+        ];
+        let Some(request_at) = words.iter().position(|word| request_verbs.contains(word)) else {
+            return Self::Chat;
+        };
+        if words[..request_at]
+            .windows(2)
+            .any(|pair| pair == ["how", "to"])
+        {
             return Self::Chat;
         }
-        if ["website", "webpage", "site", "landing"]
-            .iter()
-            .any(|word| has(word))
+        if matches!(words[request_at], "want" | "need")
+            && words[request_at + 1..].iter().any(|word| {
+                matches!(
+                    *word,
+                    "know" | "understand" | "learn" | "decide" | "discuss"
+                )
+            })
         {
-            return Self::Website;
+            return Self::Chat;
         }
-        if ["application", "app", "software"]
-            .iter()
-            .any(|word| has(word))
-        {
-            return Self::Application;
-        }
-        if ["presentation", "slides", "slideshow", "deck"]
-            .iter()
-            .any(|word| has(word))
-        {
-            return Self::Presentation;
-        }
-        if ["document", "memo", "report", "letter", "proposal"]
-            .iter()
-            .any(|word| has(word))
-        {
-            return Self::Document;
-        }
-        if ["image", "picture", "illustration", "graphic", "logo"]
-            .iter()
-            .any(|word| has(word))
-        {
-            return Self::Image;
-        }
-        if has("agent") || has("automation") {
-            return Self::Agent;
-        }
-        if ["voice", "audio", "speech", "narration"]
-            .iter()
-            .any(|word| has(word))
-        {
-            return Self::Voice;
+        // The requested artifact precedes its subject in ordinary prompts:
+        // "write a report about a website" asks for a document.
+        for (index, word) in words.iter().enumerate().skip(request_at + 1) {
+            let kind = match *word {
+                "website" | "webpage" | "site" if words.get(index + 1) != Some(&"plan") => {
+                    Some(Self::Website)
+                }
+                "landing" if words.get(index + 1) == Some(&"page") => Some(Self::Website),
+                "application" | "app" | "software" => Some(Self::Application),
+                "presentation" | "slides" | "slideshow" | "deck" => Some(Self::Presentation),
+                "document" | "memo" | "report" | "letter" | "proposal" | "brief" => {
+                    Some(Self::Document)
+                }
+                "image" | "picture" | "illustration" | "graphic" | "logo" => Some(Self::Image),
+                "agent" | "automation" => Some(Self::Agent),
+                "voice" | "audio" | "speech" | "narration" => Some(Self::Voice),
+                _ => None,
+            };
+            if let Some(kind) = kind {
+                return kind;
+            }
         }
         Self::Chat
     }
@@ -197,25 +200,33 @@ mod tests {
 
     #[test]
     fn conservative_auto_routing() {
-        assert_eq!(
-            OutputType::infer("Build a simple website for Laundros"),
-            OutputType::Website
-        );
-        assert_eq!(
-            OutputType::infer("What makes a good website?"),
-            OutputType::Chat
-        );
-        assert_eq!(
-            OutputType::infer("Create a presentation on financing"),
-            OutputType::Presentation
-        );
-        assert_eq!(
-            OutputType::infer("Draw an image of the city"),
-            OutputType::Image
-        );
-        assert_eq!(
-            OutputType::infer("Generate an image of the city"),
-            OutputType::Image
-        );
+        let cases = [
+            ("Build a simple website for Laundros", OutputType::Website),
+            ("I need a simple website for Laundros", OutputType::Website),
+            ("Make a landing page for Laundros", OutputType::Website),
+            ("Could you create a mobile app?", OutputType::Application),
+            (
+                "Create a presentation on financing",
+                OutputType::Presentation,
+            ),
+            ("Draft a proposal about our website", OutputType::Document),
+            ("I want a brief about the app", OutputType::Document),
+            ("Write a report comparing two apps", OutputType::Document),
+            ("Draw an image of the city", OutputType::Image),
+            ("Generate a logo for my site", OutputType::Image),
+            ("Create an agent for customer support", OutputType::Agent),
+            ("Produce audio narration for the deck", OutputType::Voice),
+            ("What makes a good website?", OutputType::Chat),
+            ("Can you review this site?", OutputType::Chat),
+            ("What should I write in a proposal?", OutputType::Chat),
+            ("Should I build a website?", OutputType::Chat),
+            ("Tell me how to build a website", OutputType::Chat),
+            ("I want to know how to build a website", OutputType::Chat),
+            ("Create a website about how to cook", OutputType::Website),
+            ("Create a site plan for the property", OutputType::Chat),
+        ];
+        for (prompt, expected) in cases {
+            assert_eq!(OutputType::infer(prompt), expected, "{prompt}");
+        }
     }
 }
