@@ -4,6 +4,7 @@ use futures_util::{
     StreamExt,
 };
 use serde::Serialize;
+use serde_json::Value;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -114,6 +115,20 @@ pub trait ModelProvider: Send + Sync {
     ) -> Result<(), String>;
 }
 
+/// Evidence returned by a provider-hosted search tool. The model's prose and
+/// usage count are not accepted as evidence of a usable source.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SearchEvidence {
+    pub requests: u64,
+    pub source_urls: Vec<String>,
+}
+
+impl SearchEvidence {
+    pub fn searched(&self) -> bool {
+        !self.source_urls.is_empty()
+    }
+}
+
 pub struct HttpProvider {
     kind: ProviderId,
     client: reqwest::Client,
@@ -143,6 +158,178 @@ impl HttpProvider {
             api_key,
             model,
         }
+    }
+
+    /// The server tool belongs to the OpenRouter adapter. Other model
+    /// providers keep using the provider-independent chat interface.
+    pub async fn stream_chat_with_web_search(
+        &self,
+        messages: Vec<ProviderMessage>,
+        deltas: UnboundedSender<String>,
+        require_sources: bool,
+    ) -> Result<SearchEvidence, String> {
+        if self.kind != ProviderId::OpenRouter {
+            return Err("Web search is available when OpenRouter is selected in Settings.".into());
+        }
+        self.stream_chat_inner(messages, deltas, true, require_sources)
+            .await
+    }
+
+    async fn stream_chat_inner(
+        &self,
+        messages: Vec<ProviderMessage>,
+        deltas: UnboundedSender<String>,
+        web_search: bool,
+        require_sources: bool,
+    ) -> Result<SearchEvidence, String> {
+        if deltas.is_closed() {
+            return Err(closed_consumer());
+        }
+        let mut body = if self.kind == ProviderId::Anthropic {
+            let system = messages
+                .iter()
+                .filter(|message| message.role == "system")
+                .map(|message| message.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            let messages = messages
+                .into_iter()
+                .filter(|message| message.role != "system")
+                .collect::<Vec<_>>();
+            serde_json::json!({
+                "model": self.model,
+                "messages": messages,
+                "system": system,
+                "max_tokens": 4096,
+                "stream": true
+            })
+        } else {
+            serde_json::json!({
+                "model": self.model,
+                "messages": messages,
+                "stream": true
+            })
+        };
+        if web_search {
+            body["tools"] = serde_json::json!([{
+                "type": "openrouter:web_search",
+                "parameters": {"max_uses": 3, "max_results": 5, "max_total_results": 12}
+            }]);
+            // max_uses is ignored by some native search providers. This is the
+            // OpenRouter server-tool loop's own hard limit.
+            body["max_tool_calls"] = serde_json::json!(3);
+            body["stream_options"] = serde_json::json!({"include_usage": true});
+        }
+        let request = self
+            .client
+            .post(&self.endpoint)
+            .bearer_auth(&self.api_key)
+            .json(&body);
+        let request = if self.kind == ProviderId::Anthropic {
+            request.header("anthropic-version", "2023-06-01")
+        } else {
+            request
+        };
+        let response = match select(Box::pin(request.send()), Box::pin(deltas.closed())).await {
+            Either::Left((response, _)) => {
+                response.map_err(|error| connection_error(self.kind, error))?
+            }
+            Either::Right(_) => return Err(closed_consumer()),
+        };
+        if !response.status().is_success() {
+            return Err(response_error(self.kind, response.status()));
+        }
+
+        let mut stream = response.bytes_stream();
+        let mut pending = Vec::<u8>::new();
+        let mut event = String::new();
+        let mut finished = false;
+        let mut stream_bytes = 0_usize;
+        let mut response_bytes = 0_usize;
+        let mut evidence = SearchEvidence::default();
+        let mut buffered = String::new();
+        loop {
+            let next = match select(Box::pin(stream.next()), Box::pin(deltas.closed())).await {
+                Either::Left((next, _)) => next,
+                Either::Right(_) => return Err(closed_consumer()),
+            };
+            let Some(next) = next else {
+                break;
+            };
+            let chunk = next.map_err(|error| connection_error(self.kind, error))?;
+            stream_bytes = stream_bytes.saturating_add(chunk.len());
+            if stream_bytes > MAX_STREAM_BYTES {
+                return Err(oversized_response());
+            }
+            for segment in chunk.split_inclusive(|byte| *byte == b'\n') {
+                if pending.len().saturating_add(segment.len()) > MAX_STREAM_LINE {
+                    return Err(oversized_response());
+                }
+                pending.extend_from_slice(segment);
+                if !segment.ends_with(b"\n") {
+                    continue;
+                }
+                let line = std::str::from_utf8(&pending)
+                    .map_err(|_| "The provider sent invalid stream text.".to_owned())?;
+                let line = line.trim_end_matches(['\r', '\n']);
+                if line.is_empty() {
+                    if !event.is_empty() {
+                        if web_search {
+                            if parse_search_event(
+                                self.kind,
+                                &event,
+                                &deltas,
+                                &mut response_bytes,
+                                &mut evidence,
+                                &mut buffered,
+                                require_sources,
+                            )? {
+                                finished = true;
+                                break;
+                            }
+                        } else if parse_event(self.kind, &event, &deltas, &mut response_bytes)? {
+                            finished = true;
+                            break;
+                        }
+                        event.clear();
+                    }
+                } else if let Some(data) = line.strip_prefix("data:") {
+                    let data = data.strip_prefix(' ').unwrap_or(data);
+                    let separator = usize::from(!event.is_empty());
+                    if event
+                        .len()
+                        .saturating_add(separator)
+                        .saturating_add(data.len())
+                        > MAX_STREAM_EVENT
+                    {
+                        return Err(oversized_response());
+                    }
+                    if separator > 0 {
+                        event.push('\n');
+                    }
+                    event.push_str(data);
+                }
+                pending.clear();
+            }
+            if finished {
+                break;
+            }
+        }
+        if !finished {
+            return Err(format!(
+                "{} stopped before finishing. Retry the response.",
+                self.kind.label()
+            ));
+        }
+        if web_search {
+            if (require_sources || evidence.requests > 0) && !evidence.searched() {
+                return Err("Web search did not run, so I can't verify current information. Retry when ready.".into());
+            }
+            if !buffered.is_empty() {
+                deltas.send(buffered).map_err(|_| closed_consumer())?;
+            }
+        }
+        Ok(evidence)
     }
 }
 
@@ -196,126 +383,97 @@ impl ModelProvider for HttpProvider {
         messages: Vec<ProviderMessage>,
         deltas: UnboundedSender<String>,
     ) -> Result<(), String> {
-        if deltas.is_closed() {
-            return Err(closed_consumer());
-        }
-        let body = if self.kind == ProviderId::Anthropic {
-            let system = messages
-                .iter()
-                .filter(|message| message.role == "system")
-                .map(|message| message.content.as_str())
-                .collect::<Vec<_>>()
-                .join("\n\n");
-            let messages = messages
-                .into_iter()
-                .filter(|message| message.role != "system")
-                .collect::<Vec<_>>();
-            serde_json::json!({
-                "model": self.model,
-                "messages": messages,
-                "system": system,
-                "max_tokens": 4096,
-                "stream": true
-            })
-        } else {
-            serde_json::json!({
-                "model": self.model,
-                "messages": messages,
-                "stream": true
-            })
-        };
-        let request = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&body);
-        let request = if self.kind == ProviderId::Anthropic {
-            request.header("anthropic-version", "2023-06-01")
-        } else {
-            request
-        };
-        let response = match select(Box::pin(request.send()), Box::pin(deltas.closed())).await {
-            Either::Left((response, _)) => {
-                response.map_err(|error| connection_error(self.kind, error))?
-            }
-            Either::Right(_) => return Err(closed_consumer()),
-        };
-        if !response.status().is_success() {
-            let status = response.status();
-            // Never buffer or display an untrusted error body. Status is enough.
-            return Err(response_error(self.kind, status));
-        }
+        self.stream_chat_inner(messages, deltas, false, false)
+            .await
+            .map(|_| ())
+    }
+}
 
-        let mut stream = response.bytes_stream();
-        let mut pending = Vec::<u8>::new();
-        let mut event = String::new();
-        let mut finished = false;
-        let mut stream_bytes = 0_usize;
-        let mut response_bytes = 0_usize;
-        loop {
-            let next = match select(Box::pin(stream.next()), Box::pin(deltas.closed())).await {
-                Either::Left((next, _)) => next,
-                Either::Right(_) => return Err(closed_consumer()),
-            };
-            let Some(next) = next else {
-                break;
-            };
-            let chunk = next.map_err(|error| connection_error(self.kind, error))?;
-            stream_bytes = stream_bytes.saturating_add(chunk.len());
-            if stream_bytes > MAX_STREAM_BYTES {
+fn parse_search_event(
+    kind: ProviderId,
+    data: &str,
+    deltas: &UnboundedSender<String>,
+    response_bytes: &mut usize,
+    evidence: &mut SearchEvidence,
+    buffered: &mut String,
+    require_sources: bool,
+) -> Result<bool, String> {
+    if data == "[DONE]" {
+        return Ok(true);
+    }
+    let value: Value = serde_json::from_str(data)
+        .map_err(|_| "The provider sent an unreadable stream event.".to_owned())?;
+    if value
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .is_some()
+    {
+        return Err(format!(
+            "{} stopped the response. Retry in a moment.",
+            kind.label()
+        ));
+    }
+    if let Some(count) = value
+        .pointer("/usage/server_tool_use/web_search_requests")
+        .and_then(Value::as_u64)
+    {
+        evidence.requests = evidence.requests.max(count);
+    }
+    // OpenRouter exposes result sources as url_citation annotations. Some
+    // routes place them on the streamed delta, others on the final message.
+    for pointer in [
+        "/choices/0/delta/annotations",
+        "/choices/0/message/annotations",
+    ] {
+        if let Some(annotations) = value.pointer(pointer).and_then(Value::as_array) {
+            for annotation in annotations {
+                let citation = annotation.get("url_citation").unwrap_or(annotation);
+                let url = citation.get("url").and_then(Value::as_str);
+                if let Some(url) = url.filter(|url| valid_source_url(url)) {
+                    if evidence.source_urls.len() < 25
+                        && !evidence.source_urls.iter().any(|existing| existing == url)
+                    {
+                        evidence.source_urls.push(url.to_owned());
+                    }
+                }
+            }
+        }
+    }
+    if let Some(content) = value
+        .pointer("/choices/0/delta/content")
+        .and_then(Value::as_str)
+    {
+        if !content.is_empty() {
+            *response_bytes = response_bytes.saturating_add(content.len());
+            if *response_bytes > MAX_RESPONSE_BYTES {
                 return Err(oversized_response());
             }
-            // Bound each unfinished line, rather than the entire HTTP chunk:
-            // one chunk may legitimately contain many complete SSE events.
-            for segment in chunk.split_inclusive(|byte| *byte == b'\n') {
-                if pending.len().saturating_add(segment.len()) > MAX_STREAM_LINE {
-                    return Err(oversized_response());
+            if !require_sources || evidence.searched() {
+                if !buffered.is_empty() {
+                    deltas
+                        .send(std::mem::take(buffered))
+                        .map_err(|_| closed_consumer())?;
                 }
-                pending.extend_from_slice(segment);
-                if !segment.ends_with(b"\n") {
-                    continue;
-                }
-                let line = std::str::from_utf8(&pending)
-                    .map_err(|_| "The provider sent invalid stream text.".to_owned())?;
-                let line = line.trim_end_matches(['\r', '\n']);
-                if line.is_empty() {
-                    if !event.is_empty() {
-                        if parse_event(self.kind, &event, &deltas, &mut response_bytes)? {
-                            finished = true;
-                            break;
-                        }
-                        event.clear();
-                    }
-                } else if let Some(data) = line.strip_prefix("data:") {
-                    let data = data.strip_prefix(' ').unwrap_or(data);
-                    let separator = usize::from(!event.is_empty());
-                    if event
-                        .len()
-                        .saturating_add(separator)
-                        .saturating_add(data.len())
-                        > MAX_STREAM_EVENT
-                    {
-                        return Err(oversized_response());
-                    }
-                    if separator > 0 {
-                        event.push('\n');
-                    }
-                    event.push_str(data);
-                }
-                pending.clear();
-            }
-            if finished {
-                break;
+                deltas
+                    .send(content.to_owned())
+                    .map_err(|_| closed_consumer())?;
+            } else {
+                buffered.push_str(content);
             }
         }
-        if !finished {
-            return Err(format!(
-                "{} stopped before finishing. Retry the response.",
-                self.kind.label()
-            ));
-        }
-        Ok(())
     }
+    if (!require_sources || evidence.searched()) && !buffered.is_empty() {
+        deltas
+            .send(std::mem::take(buffered))
+            .map_err(|_| closed_consumer())?;
+    }
+    Ok(false)
+}
+
+fn valid_source_url(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|parsed| {
+        matches!(parsed.scheme(), "http" | "https") && parsed.host_str().is_some()
+    })
 }
 
 fn parse_event(
@@ -437,6 +595,219 @@ mod tests {
                 )
                 .await
         })
+    }
+
+    #[test]
+    fn openrouter_search_event_requires_real_usage_or_citation() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut bytes = 0;
+        let mut evidence = SearchEvidence::default();
+        let mut buffered = String::new();
+        parse_search_event(
+            ProviderId::OpenRouter,
+            r#"{"choices":[{"delta":{"content":"Tomorrow will be sunny."}}]}"#,
+            &tx,
+            &mut bytes,
+            &mut evidence,
+            &mut buffered,
+            true,
+        )
+        .unwrap();
+        assert!(!evidence.searched());
+        assert!(rx.try_recv().is_err());
+        parse_search_event(
+            ProviderId::OpenRouter,
+            r#"{"choices":[{"delta":{"annotations":[{"type":"url_citation","url_citation":{"url":"https://weather.gov/forecast"}}]}}]}"#,
+            &tx, &mut bytes, &mut evidence, &mut buffered, true,
+        ).unwrap();
+        assert_eq!(evidence.source_urls, vec!["https://weather.gov/forecast"]);
+        assert_eq!(rx.try_recv().unwrap(), "Tomorrow will be sunny.");
+        parse_search_event(
+            ProviderId::OpenRouter,
+            r#"{"usage":{"server_tool_use":{"web_search_requests":2}}}"#,
+            &tx,
+            &mut bytes,
+            &mut evidence,
+            &mut buffered,
+            true,
+        )
+        .unwrap();
+        assert_eq!(evidence.requests, 2);
+    }
+
+    #[test]
+    fn search_event_rejects_bad_source_url_and_malformed_payload() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut bytes = 0;
+        let mut evidence = SearchEvidence::default();
+        let mut buffered = String::new();
+        parse_search_event(ProviderId::OpenRouter,
+            r#"{"choices":[{"delta":{"annotations":[{"url_citation":{"url":"javascript:alert(1)"}}],"content":"Claim"}}]}"#,
+            &tx, &mut bytes, &mut evidence, &mut buffered, true).unwrap();
+        assert!(!evidence.searched());
+        assert!(rx.try_recv().is_err());
+        assert!(parse_search_event(
+            ProviderId::OpenRouter,
+            "not-json",
+            &tx,
+            &mut bytes,
+            &mut evidence,
+            &mut buffered,
+            true,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn hosted_search_uses_server_tool_and_rejects_unsearched_response() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/chat/completions", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 4096];
+            loop {
+                let size = socket.read(&mut buffer).unwrap();
+                request.extend_from_slice(&buffer[..size]);
+                let Some(end) = request.windows(4).position(|slice| slice == b"\r\n\r\n") else {
+                    continue;
+                };
+                let head = String::from_utf8_lossy(&request[..end]);
+                let length = head
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length: ")
+                            .and_then(|value| value.parse::<usize>().ok())
+                    })
+                    .unwrap();
+                if request.len() >= end + 4 + length {
+                    break;
+                }
+            }
+            let end = request
+                .windows(4)
+                .position(|slice| slice == b"\r\n\r\n")
+                .unwrap();
+            let body: Value = serde_json::from_slice(&request[end + 4..]).unwrap();
+            assert_eq!(body["tools"][0]["type"], "openrouter:web_search");
+            assert_eq!(body["max_tool_calls"], 3);
+            assert_eq!(body["stream_options"]["include_usage"], true);
+            let stream = "data: {\"choices\":[{\"delta\":{\"content\":\"Current answer\"}}]}\n\ndata: [DONE]\n\n";
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", stream.len(), stream).unwrap();
+        });
+        let mut provider = mock_provider(url, Duration::from_secs(3));
+        provider.kind = ProviderId::OpenRouter;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let result = provider
+                .stream_chat_with_web_search(Vec::new(), tx, true)
+                .await;
+            assert!(result.unwrap_err().contains("did not run"));
+            assert!(rx.try_recv().is_err());
+        });
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn hosted_search_streams_verified_answer_and_sources() {
+        let body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Checking \"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"annotations\":[{\"type\":\"url_citation\",\"url_citation\":{\"url\":\"https://example.org/report\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"the report.\"}}]}\n\n",
+            "data: {\"usage\":{\"server_tool_use\":{\"web_search_requests\":1}}}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let (endpoint, server) = mock_server(response, Duration::ZERO);
+        let provider = mock_provider(endpoint, Duration::from_secs(3));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let evidence = provider
+                .stream_chat_with_web_search(Vec::new(), tx, true)
+                .await
+                .unwrap();
+            assert_eq!(evidence.requests, 1);
+            assert_eq!(evidence.source_urls, vec!["https://example.org/report"]);
+            assert_eq!(rx.recv().await.unwrap(), "Checking ");
+            assert_eq!(rx.recv().await.unwrap(), "the report.");
+            assert!(rx.recv().await.is_none());
+        });
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn optional_search_allows_ordinary_answer_without_tool_use() {
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"A local explanation.\"}}]}\n\ndata: [DONE]\n\n";
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let (endpoint, server) = mock_server(response, Duration::ZERO);
+        let provider = mock_provider(endpoint, Duration::from_secs(3));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let evidence = provider
+                .stream_chat_with_web_search(Vec::new(), tx, false)
+                .await
+                .unwrap();
+            assert!(!evidence.searched());
+            assert_eq!(evidence.requests, 0);
+            assert_eq!(rx.recv().await.unwrap(), "A local explanation.");
+            assert!(rx.recv().await.is_none());
+        });
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn usage_without_cited_source_cannot_verify_current_answer() {
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"Unsourced current claim.\"}}]}\n\ndata: {\"usage\":{\"server_tool_use\":{\"web_search_requests\":1}}}\n\ndata: [DONE]\n\n";
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let (endpoint, server) = mock_server(response, Duration::ZERO);
+        let provider = mock_provider(endpoint, Duration::from_secs(3));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let error = provider
+                .stream_chat_with_web_search(Vec::new(), tx, true)
+                .await
+                .unwrap_err();
+            assert!(error.contains("can't verify"), "{error}");
+            assert!(rx.try_recv().is_err());
+        });
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn other_providers_cannot_use_openrouter_hosted_search() {
+        let provider = HttpProvider::new(ProviderId::OpenAI, "test-key".into(), "test".into());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+            assert!(provider
+                .stream_chat_with_web_search(Vec::new(), tx, true)
+                .await
+                .unwrap_err()
+                .contains("OpenRouter"));
+        });
     }
 
     #[test]

@@ -75,6 +75,7 @@ pub fn save_web_search_key(key: &str) -> Result<(), String> {
         .map_err(|error| format!("Could not save the search API key: {error}"))
 }
 
+#[allow(dead_code)] // Legacy Brave credential remains in Keychain, but is not used.
 pub fn web_search_key() -> Result<Option<String>, String> {
     match web_search_entry()?.get_password() {
         Ok(key) => Ok(Some(key)),

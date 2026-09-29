@@ -14,7 +14,7 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 
 - Local streaming Chat with OpenRouter, OpenAI, Anthropic, and xAI API keys.
 - Static Website generation and conversational file revisions in isolated local workspaces; script-free preview beside the conversation.
-- Local projects, conversations, search, settings, and provider-independent web search when a search connection is supplied.
+- Local projects, conversations, search, and settings. OpenRouter Chat can use hosted web search with the existing OpenRouter key; the tool identity and authorization remain provider-independent.
 - Application, Presentation, Document, Image, Agent, and Voice retain requests in explicit placeholder workspaces.
 
 ## Boundaries
@@ -22,3 +22,5 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 SQLite owns local product data. Rust owns providers, tools, actions, and authorization. macOS Keychain owns credentials. Output modules are independent from providers and share one adaptive workspace.
 
 Website quality and dependable local behavior come before output breadth. Accounts, billing, cloud sync, organizations, mobile, marketplace, deployment, and new service integrations are deferred. Rust currently enforces execution and approval preferences for Website actions; new action types must pass through the same policy boundary.
+
+When Bench-managed usage exists, ordinary users should not need to see provider keys or model setup. Keep BYOK available in Advanced for users who choose it. Until managed usage works, the connection path must remain discoverable so a fresh install can run Chat.

@@ -11,7 +11,7 @@ export interface Conversation { id: string; projectId: string; title: string; ou
 export interface Message { id: string; conversationId: string; role: "user" | "assistant"; content: string; createdAt: string; }
 export interface Settings { executionBehavior: ExecutionBehavior; approvalBehavior: ApprovalBehavior; modelProvider: ProviderId; sidebarCollapsed: boolean; webSearchBackend: WebSearchBackend; webSearchUrl: string; }
 export interface ProviderStatus { id: ProviderId; label: string; model: string; keySource: "keychain" | "environment" | "none"; }
-export interface Snapshot { outputs: OutputDefinition[]; projects: Project[]; conversations: Conversation[]; settings: Settings; providers: ProviderStatus[]; webSearchKeySource: "keychain" | "environment" | "none"; webSearchStatus: "brave" | "searxng" | "none"; }
+export interface Snapshot { outputs: OutputDefinition[]; projects: Project[]; conversations: Conversation[]; settings: Settings; providers: ProviderStatus[]; webSearchKeySource: "keychain" | "environment" | "none"; webSearchStatus: "openrouter" | "unavailable" | "off"; }
 export interface StreamEvent { kind: "delta" | "done" | "tool"; text: string; }
 export interface ToolActivity { id: string; userMessageId: string | null; toolName: string; status: string; summary: string; }
 export interface OutputDefinition { id: Exclude<OutputType, "auto">; label: string; implemented: boolean; workspace: "conversation" | "canvas"; }

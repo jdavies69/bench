@@ -7,6 +7,7 @@ import App from "./App";
 const nativeMock = vi.hoisted(() => ({
   snapshot: vi.fn(), messages: vi.fn(), toolActivity: vi.fn(), createMessage: vi.fn(), stream: vi.fn(), loadWebsite: vi.fn(),
   websiteRevisions: vi.fn(), generateWebsite: vi.fn(), restoreWebsite: vi.fn(), prepareWebsiteAction: vi.fn(), approveAction: vi.fn(),
+  configureWebSearch: vi.fn(),
 }));
 vi.mock("./native", () => ({ native: nativeMock }));
 
@@ -16,7 +17,7 @@ const site = { pages: [{ path: "index.html", html: "<h1>Local site</h1>" }], css
 const snapshot = {
   outputs: [{ id: "chat", label: "Chat", implemented: true, workspace: "conversation" }, { id: "website", label: "Website", implemented: true, workspace: "canvas" }],
   projects: [{ id: "miscellaneous", name: "Miscellaneous", isSystem: true }], conversations: [],
-  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [], webSearchKeySource: "none", webSearchStatus: "none",
+  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [], webSearchKeySource: "none", webSearchStatus: "unavailable",
 };
 
 beforeEach(() => {
@@ -31,8 +32,35 @@ beforeEach(() => {
   nativeMock.approveAction.mockResolvedValue("one-use-grant");
   nativeMock.generateWebsite.mockResolvedValue(site);
   nativeMock.websiteRevisions.mockResolvedValue([{ revision: 1, current: true }]);
+  nativeMock.configureWebSearch.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
+
+describe("Web search settings", () => {
+  it("shows OpenRouter availability and turns search off without exposing separate credentials", async () => {
+    const available = { ...snapshot, webSearchStatus: "openrouter" };
+    nativeMock.snapshot.mockResolvedValueOnce(available).mockResolvedValueOnce({ ...available, webSearchStatus: "off", settings: { ...available.settings, webSearchBackend: "off" } });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(screen.getByText("Available with OpenRouter")).toBeTruthy();
+    expect(screen.queryByText("Brave")).toBeNull();
+    expect(screen.queryByText("SearXNG")).toBeNull();
+    const toggle = screen.getByRole("switch", { name: "Web search" });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    await user.click(toggle);
+    await waitFor(() => expect(nativeMock.configureWebSearch).toHaveBeenCalledWith("off", ""));
+    await screen.findByText("Off");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("shows unavailable when OpenRouter is not the selected, connected provider", async () => {
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Web search" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByLabelText("Brave Search API key")).toBeNull();
+  });
+});
 
 describe("Website authorization flow", () => {
   it("saves the prompt and waits for explicit approval before generation", async () => {

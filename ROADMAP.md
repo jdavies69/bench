@@ -2,12 +2,12 @@
 
 ## Now
 
+- Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
 - Review active conversation, sidebar, Settings, and design-token consistency against the running app.
 - Review the Website output for usability and factual accuracy across more live revisions.
 
 ## Next
 
-- Connect and validate web search once a user-selected backend/key is available.
 - Prepare an external Mac beta: signing, notarization, clean-machine installation, and onboarding.
 
 ## Later
@@ -28,6 +28,7 @@
 - Rust-enforced execution and approval policy with exact, one-use action grants.
 - First-class output definitions and modules; no additional output workflow was added.
 - Tool activity persists with its saved user message; the UI shows concise activity without raw debug data.
+- OpenRouter-hosted web search uses the existing key, with capped tool calls, source checks for current answers, and preserved legacy credentials. Mock tests pass; live behavior awaits verification.
 - Realistic project and Auto output intent regressions cover explicit artifacts, informational questions, ambiguous projects, and weak new-folder signals.
 - Private GitHub repository and macOS CI workflow created.
 - 10 frontend and 54 Rust tests, frontend build, formatting, Clippy, packaged app build, and GitHub CI pass. External distribution remains unsigned/unnotarized.

@@ -234,16 +234,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .advanced-state { color: var(--muted); font-size: 11px; }
 .advanced-section details summary::-webkit-details-marker { display: none; }
 .advanced-section details[open] summary svg { transform: rotate(180deg); }
-.web-search-detail { padding: var(--space-3) 0 var(--space-2); }
-.web-search-source { display: grid; grid-template-columns: 72px minmax(0, 1fr) 48px; align-items: center; gap: var(--space-2); }
-.web-search-source label, .web-search-field label { color: #676a6e; font-size: 11px; }
-.web-search-source select, .web-search-field input { min-width: 0; height: var(--control); padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: white; color: var(--ink); font-size: 12px; }
-.web-search-source button, .web-search-field .field-row button { height: var(--control); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-sm); background: #eeedea; color: var(--ink); font-size: 11px; }
-.web-search-source button:disabled { opacity: .45; }
-.web-search-field { margin: var(--space-3) 0 0 80px; }
-.web-search-field > label { display: block; margin-bottom: var(--space-2); }
-.web-search-field > input { width: 100%; }
-.web-search-remove { margin-top: var(--space-2); padding: 0; border: 0; background: transparent; color: #956b62; font-size: 11px; }
+.web-search-row { min-height: 49px; display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.web-search-row .advanced-state { display: block; margin-top: var(--space-1); }
+.setting-switch { width: 34px; height: 20px; flex: none; display: flex; align-items: center; padding: 2px; border: 0; border-radius: 10px; background: #d9d8d5; transition: background .2s ease; }
+.setting-switch[aria-checked="true"] { background: #686d6b; }
+.setting-switch span { width: 16px; height: 16px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0,0,0,.12); transition: transform .2s ease; }
+.setting-switch[aria-checked="true"] span { transform: translateX(14px); }
+.setting-switch:disabled { opacity: .5; }
 .model-list { padding-top: var(--space-3); }
 .model-row { display: grid; grid-template-columns: 78px minmax(0, 1fr) 48px; gap: var(--space-2); align-items: center; margin: var(--space-2) 0; }
 .model-row label { color: #676a6e; font-size: 11px; }

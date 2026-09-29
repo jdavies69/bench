@@ -129,6 +129,14 @@ pub fn initialize(conn: &Connection) -> Result<(), String> {
          INSERT OR IGNORE INTO settings(key, value) VALUES ('web_search_url', '');",
     )
     .map_err(|e| e.to_string())?;
+    // Legacy backend choices are inert. Keep their URL/Keychain credential so
+    // migration cannot destroy user data, while defaulting to the OpenRouter
+    // hosted tool selected for this milestone.
+    conn.execute(
+        "UPDATE settings SET value = 'auto' WHERE key = 'web_search_backend' AND value IN ('brave', 'searxng')",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
     // Legacy executions remain unassociated; guessing a request would invent
     // history. New executions validate their exact saved user message.
     ensure_column(
@@ -245,7 +253,7 @@ pub fn set_web_search(
     backend: &str,
     searxng_url: Option<&str>,
 ) -> Result<Settings, String> {
-    if !matches!(backend, "auto" | "brave" | "searxng" | "off") {
+    if !matches!(backend, "auto" | "off") {
         return Err("Choose a valid web search connection.".into());
     }
     let existing = settings(conn)?;
@@ -786,7 +794,7 @@ mod tests {
                 "claude-sonnet-5-5",
             )
             .unwrap();
-            set_web_search(&conn, "searxng", Some("https://search.example/search")).unwrap();
+            set_web_search(&conn, "off", None).unwrap();
             chat.id
         };
         let conn = open(&path).unwrap();
@@ -796,11 +804,8 @@ mod tests {
         );
         assert_eq!(settings(&conn).unwrap().execution_behavior, "just_do_it");
         assert_eq!(settings(&conn).unwrap().model_provider, "anthropic");
-        assert_eq!(settings(&conn).unwrap().web_search_backend, "searxng");
-        assert_eq!(
-            settings(&conn).unwrap().web_search_url,
-            "https://search.example/search"
-        );
+        assert_eq!(settings(&conn).unwrap().web_search_backend, "off");
+        assert_eq!(settings(&conn).unwrap().web_search_url, "");
         assert_eq!(
             model(&conn, crate::provider::ProviderId::Anthropic).unwrap(),
             "claude-sonnet-5-5"
@@ -818,6 +823,26 @@ mod tests {
         assert_eq!(settings(&conn).unwrap().web_search_backend, "auto");
         set_web_search(&conn, "off", None).unwrap();
         assert_eq!(settings(&conn).unwrap().web_search_backend, "off");
+        assert!(set_web_search(&conn, "brave", None).is_err());
+    }
+
+    #[test]
+    fn legacy_search_selection_migrates_without_erasing_url() {
+        let conn = Connection::open_in_memory().unwrap();
+        initialize(&conn).unwrap();
+        conn.execute(
+            "UPDATE settings SET value = 'searxng' WHERE key = 'web_search_backend'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE settings SET value = 'https://search.example/search' WHERE key = 'web_search_url'",
+            [],
+        ).unwrap();
+        initialize(&conn).unwrap();
+        let selected = settings(&conn).unwrap();
+        assert_eq!(selected.web_search_backend, "auto");
+        assert_eq!(selected.web_search_url, "https://search.example/search");
     }
 
     #[test]

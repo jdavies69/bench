@@ -3,7 +3,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Markdown } from "./components/Markdown";
 import { workspaceModules } from "./outputs/registry";
-import { native, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebSearchBackend, type WebsiteState } from "./native";
+import { native, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebsiteState } from "./native";
 import "./App.css";
 
 type IconName = "mark" | "plus" | "search" | "folder" | "chevron" | "arrow" | "panel" | "close";
@@ -60,13 +60,9 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError }
 }) {
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
   const [models, setModels] = useState<Record<string, string>>({});
-  const [searchChoice, setSearchChoice] = useState<WebSearchBackend>(snapshot.settings.webSearchBackend);
-  const [searchUrl, setSearchUrl] = useState(snapshot.settings.webSearchUrl);
   const [saving, setSaving] = useState(false);
   const keyInput = useRef<HTMLInputElement>(null);
-  const searchKeyInput = useRef<HTMLInputElement>(null);
   useEffect(() => { if (keyInput.current) keyInput.current.value = ""; }, [selectedProvider]);
-  useEffect(() => { setSearchChoice(snapshot.settings.webSearchBackend); setSearchUrl(snapshot.settings.webSearchUrl); }, [snapshot.settings.webSearchBackend, snapshot.settings.webSearchUrl]);
   const perform = async (action: () => Promise<unknown>) => {
     setSaving(true);
     try { await action(); await onRefresh(); onError(""); } catch (error) { onError(errorText(error)); } finally { setSaving(false); }
@@ -85,17 +81,7 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError }
       </div>}
     </div>)}</div></section>
     <section className="settings-section advanced-section"><h2>Advanced</h2>
-      <details><summary>Web search <span className="advanced-state">{snapshot.settings.webSearchBackend === "off" ? "Off" : snapshot.webSearchStatus === "searxng" ? "SearXNG" : snapshot.webSearchStatus === "brave" ? "Brave" : "Not connected"}</span><Icon name="chevron" size={16} /></summary>
-        <div className="web-search-detail">
-          <form className="web-search-source" onSubmit={(event) => { event.preventDefault(); void perform(() => native.configureWebSearch(searchChoice, searchUrl)); }}>
-            <label htmlFor="web-search-source">Source</label>
-            <select id="web-search-source" value={searchChoice} onChange={(event) => setSearchChoice(event.target.value as WebSearchBackend)}><option value="auto">Use available</option><option value="brave">Brave</option><option value="searxng">SearXNG</option><option value="off">Off</option></select>
-            <button type="submit" disabled={saving || (searchChoice === "brave" && snapshot.webSearchKeySource === "none") || (searchChoice === "searxng" && !searchUrl.trim()) || (searchChoice === snapshot.settings.webSearchBackend && (searchChoice !== "searxng" || searchUrl === snapshot.settings.webSearchUrl))}>Save</button>
-          </form>
-          {searchChoice === "searxng" && <div className="web-search-field"><label htmlFor="searxng-url">Instance URL</label><input id="searxng-url" type="url" value={searchUrl} onChange={(event) => setSearchUrl(event.target.value)} placeholder="https://search.example.com" spellCheck={false} /></div>}
-          {searchChoice === "brave" && <form className="web-search-field" onSubmit={(event) => { event.preventDefault(); const key = searchKeyInput.current?.value ?? ""; if (!key.trim()) return; void perform(async () => { await native.saveWebSearchKey(key); if (searchKeyInput.current) searchKeyInput.current.value = ""; }); }}><label htmlFor="brave-search-key">Brave Search API key · {snapshot.webSearchKeySource === "none" ? "Not connected" : "Connected"}</label><div className="field-row"><input ref={searchKeyInput} id="brave-search-key" type="password" autoComplete="off" spellCheck={false} placeholder={snapshot.webSearchKeySource === "keychain" ? "Replace key" : "Paste API key"} /><button type="submit" disabled={saving}>{snapshot.webSearchKeySource === "keychain" ? "Replace" : "Connect"}</button></div>{snapshot.webSearchKeySource === "keychain" && <button type="button" className="web-search-remove" disabled={saving} onClick={() => void perform(() => native.removeWebSearchKey())}>Remove key</button>}</form>}
-        </div>
-      </details>
+      <div className="web-search-row"><div><div className="setting-label">Web search</div><div className="advanced-state">{snapshot.webSearchStatus === "openrouter" ? "Available with OpenRouter" : snapshot.webSearchStatus === "off" ? "Off" : "Unavailable"}</div></div><button type="button" className="setting-switch" role="switch" aria-label="Web search" aria-checked={snapshot.settings.webSearchBackend !== "off"} disabled={saving} onClick={() => void perform(() => native.configureWebSearch(snapshot.settings.webSearchBackend === "off" ? "auto" : "off", ""))}><span /></button></div>
       <details><summary>Model IDs <Icon name="chevron" size={16} /></summary><div className="model-list">{snapshot.providers.map((item) => <form key={item.id} className="model-row" onSubmit={(event) => { event.preventDefault(); void perform(() => native.updateModel(item.id, models[item.id] ?? item.model)); }}><label htmlFor={`model-${item.id}`}>{item.label}</label><input id={`model-${item.id}`} value={models[item.id] ?? item.model} onChange={(event) => setModels((old) => ({ ...old, [item.id]: event.target.value }))} spellCheck={false} /><button type="submit" disabled={saving || (models[item.id] ?? item.model) === item.model}>Save</button></form>)}</div></details>
     </section>
   </section>;

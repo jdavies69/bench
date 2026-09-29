@@ -1,63 +1,114 @@
-mod web_search;
-
-use async_trait::async_trait;
-use serde::Serialize;
-
-pub use web_search::{requires_current_info, WebSearch};
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchHit {
-    pub title: String,
-    pub url: String,
-    pub snippet: String,
+/// Tool identity and authorization stay separate from the selected model
+/// provider. Adapters decide how to execute each capability.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ToolKind {
+    WebSearch,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolResult {
-    pub query: String,
-    pub backend: String,
-    pub elapsed_ms: u128,
-    pub summary: String,
-    pub results: Vec<SearchHit>,
-}
-
-impl ToolResult {
-    /// Search text is untrusted external content. Callers should also tell the model
-    /// to treat it as evidence, not instructions.
-    pub fn for_model(&self) -> String {
-        let mut text = format!("Web search results for {:?}:\n", self.query);
-        for (index, hit) in self.results.iter().enumerate() {
-            text.push_str(&format!(
-                "{}. {}\nURL: {}\nSnippet: {}\n",
-                index + 1,
-                hit.title,
-                hit.url,
-                hit.snippet
-            ));
+impl ToolKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::WebSearch => "web_search",
         }
-        text
+    }
+
+    pub fn category(self) -> crate::policy::ActionCategory {
+        match self {
+            Self::WebSearch => crate::policy::ActionCategory::ReadOnly,
+        }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolError {
-    pub kind: &'static str,
-    pub message: &'static str,
+pub fn requires_current_info(query: &str) -> bool {
+    let text = query.to_lowercase();
+    let current_words = [
+        "current",
+        "currently",
+        "latest",
+        "today",
+        "tonight",
+        "tomorrow",
+        "this week",
+        "this month",
+        "right now",
+        "live",
+        "recent",
+        "as of",
+        "up to date",
+        "up-to-date",
+    ];
+    let volatile_topics = [
+        "weather",
+        "forecast",
+        "stock price",
+        "share price",
+        "price of",
+        "market cap",
+        "exchange rate",
+        "news",
+        "announcement",
+        "announced",
+        "earnings",
+        "score",
+        "schedule",
+        "who is the",
+        "what is the price",
+    ];
+    let asks_for_facts = [
+        "what",
+        "who",
+        "when",
+        "where",
+        "how",
+        "tell me",
+        "show me",
+        "give me",
+        "check",
+        "find",
+        "search",
+        "weather in",
+        "forecast for",
+        "stock price",
+        "share price",
+    ]
+    .iter()
+    .any(|word| contains_term(&text, word));
+    current_words.iter().any(|word| contains_term(&text, word))
+        || (asks_for_facts
+            && volatile_topics
+                .iter()
+                .any(|word| contains_term(&text, word)))
 }
 
-impl ToolError {
-    pub const fn new(kind: &'static str, message: &'static str) -> Self {
-        Self { kind, message }
+fn contains_term(text: &str, term: &str) -> bool {
+    text.match_indices(term).any(|(start, _)| {
+        let before = text[..start].chars().next_back();
+        let after = text[start + term.len()..].chars().next();
+        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn routes_current_requests() {
+        assert!(requires_current_info("weather in NYC this week"));
+        assert!(requires_current_info("latest OpenAI announcement"));
+        assert!(requires_current_info("current NVIDIA price"));
+        assert!(!requires_current_info("Build a website for Laundros"));
+        assert!(!requires_current_info("Build a weather app"));
+        assert!(!requires_current_info("Deliver the document"));
+        assert!(!requires_current_info("Explain how a database index works"));
     }
-}
 
-#[async_trait]
-pub trait Tool: Send + Sync {
-    fn name(&self) -> &'static str;
-    /// The implementation owns its category; providers and UI cannot lower it.
-    fn category(&self) -> crate::policy::ActionCategory;
-    async fn execute(&self, query: &str) -> Result<ToolResult, ToolError>;
+    #[test]
+    fn tool_identity_and_policy_are_provider_independent() {
+        assert_eq!(ToolKind::WebSearch.name(), "web_search");
+        assert_eq!(
+            ToolKind::WebSearch.category(),
+            crate::policy::ActionCategory::ReadOnly
+        );
+    }
 }

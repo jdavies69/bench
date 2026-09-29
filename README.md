@@ -22,7 +22,9 @@ Generated copy is a draft. Bench asks the model to leave unknown business detail
 
 ## Web search
 
-Web search is a separate Rust tool, independent of the selected model provider. In **Settings → Advanced → Web search**, connect a Brave Search API key or enter the URL of a JSON-enabled SearXNG instance, then save the source. Brave's key is held in the system credential store; SQLite stores only the source choice and SearXNG URL. `BRAVE_SEARCH_API_KEY` and `BENCH_SEARXNG_URL` in Bench's launch environment remain fallbacks under **Use available**. Search results are passed back into the model turn with source URLs, and execution metadata is saved locally. Without a search connection, Bench declines to verify current facts instead of guessing. Model API keys do not automatically provide web search.
+With OpenRouter selected, Bench offers OpenRouter's hosted `openrouter:web_search` tool to Chat using the existing OpenRouter key. The model can search when it needs current information. Bench caps server-tool calls, records search activity with the saved user message, and requires a valid source citation before saving an answer to a clearly current-information request. **Settings → Advanced → Web search** can turn it off. With another model provider selected, Bench cannot verify current facts through this tool and asks you to select OpenRouter for such requests. The generic tool identity and authorization remain separate from the model-provider implementation.
+
+Older Brave and SearXNG settings migrate to OpenRouter search. Their stored Keychain credential and URL are preserved locally but no longer used. The OpenRouter streaming search path has mock coverage; a live search has not yet been verified.
 
 Execution and approval preferences are enforced in Rust for Website creation, revision, and version restoration. **Discuss first** or **Always ask** requires an explicit inline approval; approvals authorize one exact request and revision, expire, and cannot be reused. **Balanced** permits directly requested reversible local writes while reviewing model-initiated changes. Sensitive, destructive, and financial categories remain approval boundaries for future tools. Chat itself does not execute write actions.
 
@@ -33,6 +35,6 @@ Execution and approval preferences are enforced in Rust for Website creation, re
 - From `src-tauri`: `cargo fmt --all -- --check`, `cargo clippy --locked --all-targets --all-features -- -D warnings`, and `cargo test --locked --all-targets --all-features`
 - `npm run tauri build -- --bundles app`
 
-Streaming can be exercised end to end once a valid provider key is saved. The local test suite covers output intent, project grouping and manual reassignment, stream event parsing, error mapping, website creation and revision using a fake provider, tool result parsing, failed SQLite writes, and reopening the database. Live web search requires a configured search backend.
+Streaming can be exercised end to end once a valid provider key is saved. The local test suite covers output intent, project grouping and manual reassignment, stream event parsing, error mapping, website creation and revision using a fake provider, hosted-search request and citation parsing, failed SQLite writes, and reopening the database. Live web search requires a connected OpenRouter key and remains unverified.
 
 CI builds the frontend and runs frontend tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Packaged builds are local development artifacts until Developer ID signing, notarization, and clean-machine installation are verified.
