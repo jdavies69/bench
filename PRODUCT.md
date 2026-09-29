@@ -21,4 +21,4 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 
 SQLite owns local product data. Rust owns providers, tools, actions, and authorization. macOS Keychain owns credentials. Output modules are independent from providers and share one adaptive workspace.
 
-Website quality and dependable local behavior come before output breadth. Accounts, billing, cloud sync, organizations, mobile, marketplace, deployment, and new service integrations are deferred. Execution and approval preferences must become enforced policy before expanding actions.
+Website quality and dependable local behavior come before output breadth. Accounts, billing, cloud sync, organizations, mobile, marketplace, deployment, and new service integrations are deferred. Rust currently enforces execution and approval preferences for Website actions; new action types must pass through the same policy boundary.

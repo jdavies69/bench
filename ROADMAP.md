@@ -30,4 +30,4 @@
 - Tool activity persists with its saved user message; the UI shows concise activity without raw debug data.
 - Realistic project and Auto output intent regressions cover explicit artifacts, informational questions, ambiguous projects, and weak new-folder signals.
 - Private GitHub repository and macOS CI workflow created.
-- 10 frontend and 51 Rust tests, frontend build, formatting, Clippy, and packaged app build pass. External distribution remains unsigned/unnotarized.
+- 10 frontend and 54 Rust tests, frontend build, formatting, Clippy, packaged app build, and GitHub CI pass. External distribution remains unsigned/unnotarized.
