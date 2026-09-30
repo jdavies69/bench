@@ -207,11 +207,17 @@ describe("Fresh install and input safety", () => {
     await screen.findByRole("heading", { name: "Settings" });
     expect(nativeMock.saveProviderKey).not.toHaveBeenCalled();
   });
-  it("can choose another provider without creating an OpenRouter connection", async () => {
-    nativeMock.snapshot.mockResolvedValue({ ...snapshot, providers: [{ ...snapshot.providers[0], keySource: "none" }] });
+  it("shows only OpenRouter settings while retaining legacy provider metadata", async () => {
+    nativeMock.snapshot.mockResolvedValue({ ...snapshot, providers: [snapshot.providers[0], ...["openai", "anthropic", "xai"].map((id) => ({ id, label: id === "openai" ? "OpenAI" : id === "anthropic" ? "Anthropic" : "xAI / Grok", model: "existing-model", keySource: "keychain" }))] });
     const user = userEvent.setup(); render(<App />);
-    await user.click(await screen.findByRole("button", { name: "Use another provider" }));
-    await screen.findByRole("heading", { name: "Settings" });
+    await user.click(await screen.findByRole("button", { name: "Settings" }));
+    expect(screen.getByRole("button", { name: /OpenRouter\s*Connected/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /OpenAI|Anthropic|xAI/ })).toBeNull();
+    await user.click(screen.getByText("Model IDs"));
+    expect(screen.getByLabelText("OpenRouter")).toBeTruthy();
+    expect(screen.queryByLabelText("OpenAI")).toBeNull();
+    expect(screen.queryByLabelText("Anthropic")).toBeNull();
+    expect(screen.queryByLabelText("xAI / Grok")).toBeNull();
     expect(nativeMock.saveProviderKey).not.toHaveBeenCalled();
   });
   it("saves the request before connection setup without making a model call", async () => {

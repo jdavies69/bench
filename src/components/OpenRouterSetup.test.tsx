@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { OpenRouterSetup } from "./OpenRouterSetup";
 afterEach(cleanup);
 function setup(overrides = {}) {
-  const callbacks = { onConnect: vi.fn().mockResolvedValue(undefined), onCancelConnect: vi.fn().mockResolvedValue(undefined), onDismiss: vi.fn(), onOtherProviders: vi.fn(), ...overrides };
+  const callbacks = { onConnect: vi.fn().mockResolvedValue(undefined), onCancelConnect: vi.fn().mockResolvedValue(undefined), onDismiss: vi.fn(), ...overrides };
   const view = render(<OpenRouterSetup {...callbacks} />); return { callbacks, view };
 }
 function deferred() { let resolve: () => void = () => {}; let reject: (error: Error) => void = () => {}; const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
@@ -42,9 +42,9 @@ describe("OpenRouter browser onboarding", () => {
     expect(callbacks.onCancelConnect).toHaveBeenCalledTimes(1); await act(async () => cancellation.reject(new Error("secret"))); expect((await screen.findByRole("alert")).textContent).not.toContain("secret");
     await userEvent.click(screen.getByRole("button", { name: "Cancel connection" })); expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeTruthy(); await act(async () => pending.resolve());
   });
-  it("allows setup later and other-provider routes before connecting", async () => {
-    const { callbacks } = setup(); await userEvent.click(screen.getByRole("button", { name: "Set up later" })); await userEvent.click(screen.getByRole("button", { name: "Use another provider" }));
-    expect(callbacks.onDismiss).toHaveBeenCalledTimes(1); expect(callbacks.onOtherProviders).toHaveBeenCalledTimes(1); expect(callbacks.onConnect).not.toHaveBeenCalled();
+  it("allows setup later before connecting", async () => {
+    const { callbacks } = setup(); await userEvent.click(screen.getByRole("button", { name: "Set up later" }));
+    expect(callbacks.onDismiss).toHaveBeenCalledTimes(1); expect(callbacks.onConnect).not.toHaveBeenCalled();
   });
 });
 

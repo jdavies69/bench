@@ -9,6 +9,8 @@
 
 ## Current handoff
 
+- Current UI refinement: Connections and Advanced model settings expose only OpenRouter; removed the other-provider onboarding route. Legacy provider implementation and credentials are preserved. Frontend tests/build pass; rebuilt package installed and native Settings visibly shows only OpenRouter.
+
 - Installed September 30 OAuth/usage update: `/Applications/Bench.app` recursively matches the freshly built package. Connect OpenRouter now opens browser sign-in with PKCE and stores the result directly in Keychain. The user completed authorization and confirmed it works; Computer Use then verified automatic return to Settings with OpenRouter Connected. No paid inference/search was run. Manual key entry remains a Settings fallback.
 - Native usage was live-verified against the browser-connected key: Today, Month, Lifetime, and BYOK Month showed $0.00, with Unlimited key limit and Not applicable remaining. These are provider-returned values for the newly created key, not fabricated values or an account balance. Refresh is manual; neither launch nor Settings entry reads the protected credential or requests usage. The earlier check of the old key waited for Keychain authorization; the user allowed it. Computer Use cannot interact with Apple's SecurityAgent.
 - Strong PKCE verifier and random callback path, strict bounded loopback HTTP, no redirects, cancellation/timeout, one active attempt, and serialized credential changes keep secrets in Rust/Keychain. Automated tests verify cancellation, stale completion, unmount cancellation, exact callback, exchange, and safe failures. Successful setup never starts a saved prompt automatically.

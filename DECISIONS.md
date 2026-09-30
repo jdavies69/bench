@@ -2,6 +2,7 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Show only OpenRouter in Connections and model settings; remove the other-provider onboarding route. | User requested removal of OpenAI, Anthropic, and xAI connection controls. Preserve legacy credentials and provider implementation; do not erase user data. |
 | 2026-09-30 | Use Connect OpenRouter browser sign-in with OAuth PKCE; keep manual API-key entry as a Settings fallback. | User-selected simpler onboarding supersedes create/copy/paste. Rust receives the localhost callback, exchanges the code, and stores the credential in Keychain; no Bench account or paid model validation. |
 | 2026-09-30 | Activate all existing output types incrementally with real generation, persistence, and export/playback. | Latest user request supersedes deferring breadth until Website is excellent. Reassess OpenRouter Agent SDK reuse before adding a custom Agent runtime; never label placeholders live. |
 | 2026-09-30 | Guide fresh users to create their own OpenRouter key in the system browser and paste it into Bench. | User-requested minimal onboarding: no Bench account, OAuth integration, billing service, or paid validation request. Keep other providers and saved work available. |

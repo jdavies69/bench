@@ -4,10 +4,9 @@ type OpenRouterSetupProps = {
   onConnect: () => Promise<void>;
   onCancelConnect: () => Promise<void>;
   onDismiss: () => void;
-  onOtherProviders: () => void;
 };
 
-export function OpenRouterSetup({ onConnect, onCancelConnect, onDismiss, onOtherProviders }: OpenRouterSetupProps) {
+export function OpenRouterSetup({ onConnect, onCancelConnect, onDismiss }: OpenRouterSetupProps) {
   const working = useRef(false);
   const latestCancel = useRef(onCancelConnect);
   latestCancel.current = onCancelConnect;
@@ -55,6 +54,6 @@ export function OpenRouterSetup({ onConnect, onCancelConnect, onDismiss, onOther
     <p className="quiet-note">Your requests and relevant conversation content are sent to OpenRouter when you use Bench.</p>
     {error && <p className="setup-error" role="alert">{error}</p>}
     {connected && <p role="status" className="quiet-note">OpenRouter is connected. You can continue in Bench.</p>}
-    <div className="connection-actions"><button type="button" disabled={busy} onClick={onDismiss}>{connected ? "Continue" : "Set up later"}</button><button type="button" disabled={busy} onClick={onOtherProviders}>Use another provider</button></div>
+    <div className="connection-actions"><button type="button" disabled={busy} onClick={onDismiss}>{connected ? "Continue" : "Set up later"}</button></div>
   </section>;
 }
