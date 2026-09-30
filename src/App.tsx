@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Markdown } from "./components/Markdown";
+import { OutputPicker } from "./components/OutputPicker";
 import { workspaceModules } from "./outputs/registry";
 import { native, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebsiteState } from "./native";
 import "./App.css";
@@ -37,7 +38,7 @@ function Composer({ value, onChange, onSend, busy, outputType, setOutputType, ce
   return <form className={`composer ${centered ? "composer-centered" : ""}`} onSubmit={(event) => { event.preventDefault(); onSend(); }}>
     <button type="button" className="composer-add" title="Attachments are coming later" aria-label="Add attachment (coming later)" disabled><Icon name="plus" size={22} /></button>
     <textarea ref={textarea} rows={1} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSend(); } }} placeholder="Describe what you want to make..." aria-label="Message" />
-    <label className="output-picker"><span className="sr-only">Output type</span><select value={outputType} onChange={(event) => setOutputType(event.target.value as OutputType)}><option value="auto">Auto</option>{definitions.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}</select><Icon name="chevron" size={15} /></label>
+    <OutputPicker value={outputType} onChange={setOutputType} definitions={definitions} />
     <button className="send-button" type="submit" disabled={!value.trim() || busy} aria-label="Send message"><Icon name="arrow" size={21} /></button>
   </form>;
 }

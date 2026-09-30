@@ -66,7 +66,7 @@ describe("Website authorization flow", () => {
   it("saves the prompt and waits for explicit approval before generation", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByRole("option", { name: "Website" });
+    await screen.findByRole("button", { name: "Output type: Auto" });
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Build a website");
     await user.click(screen.getByRole("button", { name: "Send message" }));
     await screen.findByText("Create this website?");
@@ -82,7 +82,7 @@ describe("Website authorization flow", () => {
 
   it("keeps a declined request and can review it again without duplicating the prompt", async () => {
     const user = userEvent.setup(); render(<App />);
-    await screen.findByRole("option", { name: "Website" });
+    await screen.findByRole("button", { name: "Output type: Auto" });
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Build a website");
     await user.click(screen.getByRole("button", { name: "Send message" }));
     await screen.findByText("Create this website?");
@@ -99,7 +99,7 @@ describe("Website authorization flow", () => {
     nativeMock.prepareWebsiteAction.mockResolvedValue(null);
     nativeMock.websiteRevisions.mockRejectedValue(new Error("disk read error"));
     const user = userEvent.setup(); render(<App />);
-    await screen.findByRole("option", { name: "Website" });
+    await screen.findByRole("button", { name: "Output type: Auto" });
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Build a website");
     await user.click(screen.getByRole("button", { name: "Send message" }));
     const preview = await screen.findByTitle("Website preview");
