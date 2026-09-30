@@ -8,6 +8,14 @@ export function safePreviewHtml(html: string): string {
   template.content.querySelectorAll("*").forEach((node) => {
     for (const attribute of [...node.attributes]) {
       const name = attribute.name.toLowerCase();
+      // Same-document section links work without scripts or network access.
+      // Only HTML anchors may retain a fragment; SVG references stay blocked.
+      if (name === "href" && node.tagName === "A" && attribute.value.startsWith("#")) {
+        // srcdoc inherits the parent's base URL, so bare fragments would leave
+        // the preview and navigate to Bench's application URL.
+        node.setAttribute("href", `about:srcdoc${attribute.value}`);
+        continue;
+      }
       if (name.startsWith("on") || ["href", "xlink:href", "srcset", "action", "formaction", "target", "download", "ping"].includes(name)) node.removeAttribute(attribute.name);
       if (name === "src" && !/^data:image\/(?:png|jpeg|gif|webp|avif);/i.test(attribute.value)) node.removeAttribute(attribute.name);
       if (name === "style" && /url\s*\(|@import|expression\s*\(/i.test(attribute.value)) node.removeAttribute(attribute.name);

@@ -331,6 +331,15 @@ fn apply_patch(previous: Option<&WebsiteState>, patch: SitePatch) -> Result<Webs
     if !files.contains_key("index.html") || !files.contains_key("style.css") {
         return Err("Website response needs index.html and style.css.".into());
     }
+    // macOS commonly uses a case-insensitive filesystem. Distinct JSON keys
+    // must not overwrite each other when an immutable revision is saved.
+    let mut names = std::collections::BTreeSet::new();
+    if files
+        .keys()
+        .any(|path| !names.insert(path.to_ascii_lowercase()))
+    {
+        return Err("Website contains file names that differ only by capitalization.".into());
+    }
     if files.len() > 9 || files.values().map(String::len).sum::<usize>() > 300_000 {
         return Err("Website response is too large.".into());
     }
@@ -554,6 +563,55 @@ mod tests {
         assert_eq!(loaded.revision, 2);
         assert_eq!(loaded.pages.len(), 2);
         assert_eq!(loaded.css, "body{color:black}");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn case_colliding_pages_cannot_overwrite_saved_content() {
+        let root = std::env::temp_dir().join(format!("bench-web-{}", Uuid::new_v4()));
+        let id = Uuid::new_v4().to_string();
+        let initial = save(&root, &id, &initial_state()).unwrap();
+        let collision = apply_patch(
+            Some(&initial),
+            serde_json::from_str(r#"{"files":{"Index.html":"<h1>Replacement</h1>"}}"#).unwrap(),
+        );
+        assert_eq!(
+            collision.unwrap_err(),
+            "Website contains file names that differ only by capitalization."
+        );
+        let mut invalid = initial.clone();
+        invalid.pages.push(WebsitePage {
+            path: "Index.html".into(),
+            html: "<h1>Replacement</h1>".into(),
+        });
+        assert!(save(&root, &id, &invalid).is_err());
+        let reloaded = load(&root, &id).unwrap().unwrap();
+        assert_eq!(reloaded.revision, initial.revision);
+        assert_eq!(reloaded.pages[0].html, initial.pages[0].html);
+        assert_eq!(list_revisions(&root, &id).unwrap().len(), 1);
+
+        // A rename remains valid when the old spelling is removed in the patch.
+        let with_about = apply_patch(
+            Some(&initial),
+            serde_json::from_str(r#"{"files":{"about.html":"<h1>About</h1>"}}"#).unwrap(),
+        )
+        .unwrap();
+        let renamed = apply_patch(
+            Some(&with_about),
+            serde_json::from_str(
+                r#"{"files":{"About.html":"<h1>About us</h1>"},"remove":["about.html"]}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let saved = save(&root, &id, &renamed).unwrap();
+        assert_eq!(saved.revision, 2);
+        assert!(load(&root, &id)
+            .unwrap()
+            .unwrap()
+            .pages
+            .iter()
+            .any(|page| page.path == "About.html" && page.html == "<h1>About us</h1>"));
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { buildPreviewDocument, safePreviewHtml } from "./preview";
 
 describe("isolated Website document", () => {
+  it("keeps same-document section navigation while blocking other destinations and SVG references", () => {
+    const result = safePreviewHtml('<a href="#services" target="_top" ping="https://evil.test">Services</a><section id="services">Details</section><a href="https://evil.test/#services">External</a><a href="about.html#services">Page</a><svg><use href="#services"></use></svg>');
+    const parsed = new DOMParser().parseFromString(result, "text/html");
+    expect([...parsed.querySelectorAll("a")].map((node) => node.getAttribute("href"))).toEqual(["about:srcdoc#services", null, null]);
+    expect(parsed.querySelector("a")?.hasAttribute("target")).toBe(false);
+    expect(parsed.querySelector("a")?.hasAttribute("ping")).toBe(false);
+    expect(parsed.querySelector("use")?.hasAttribute("href")).toBe(false);
+    expect(parsed.querySelector("#services")?.textContent).toBe("Details");
+  });
+
   it("removes active markup, navigation, external resources, and event handlers", () => {
     const input = `<meta http-equiv="refresh" content="0;url=https://evil.test"><base href="https://evil.test"><script>danger()</script><iframe src="https://evil.test"></iframe><form action="https://evil.test"><input></form><template><img onerror="danger()"></template><a href="javascript:danger()" ping="https://evil.test" target="_top" onclick="danger()">About</a><img src="https://evil.test/x" srcset="https://evil.test/y 2x" onerror="danger()"><svg><use href="https://evil.test/x"></use></svg><div style="background:url(https://evil.test)">Hello</div>`;
     const result = safePreviewHtml(input);

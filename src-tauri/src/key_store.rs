@@ -33,12 +33,59 @@ pub fn load(provider: ProviderId) -> Result<Option<String>, String> {
 }
 
 pub fn source(provider: ProviderId) -> Result<&'static str, String> {
-    if load(provider)?.is_some() {
+    source_from_presence(stored_key_exists(provider.as_str()), || {
+        provider.environment_key().is_some()
+    })
+}
+
+fn source_from_presence(
+    stored: Result<bool, String>,
+    environment_exists: impl FnOnce() -> bool,
+) -> Result<&'static str, String> {
+    if stored? {
         Ok("keychain")
-    } else if provider.environment_key().is_some() {
+    } else if environment_exists() {
         Ok("environment")
     } else {
         Ok("none")
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn stored_key_exists(account: &str) -> Result<bool, String> {
+    use security_framework::{
+        item::{ItemClass, ItemSearchOptions},
+        os::macos::keychain::{SecKeychain, SecPreferencesDomain},
+    };
+
+    // Match keyring's default User-domain keychain. Startup needs only status;
+    // requesting password data here would trigger the item's access control.
+    let keychain = SecKeychain::default_for_domain(SecPreferencesDomain::User)
+        .map_err(|error| format!("Could not inspect the API key: {error}"))?;
+    let result = ItemSearchOptions::new()
+        .keychains(&[keychain])
+        .class(ItemClass::generic_password())
+        .service(SERVICE)
+        .account(account)
+        .load_attributes(true)
+        .load_data(false)
+        .load_refs(false)
+        .search();
+    match result {
+        Ok(items) => Ok(!items.is_empty()),
+        Err(error) if error.code() == -25300 => Ok(false), // errSecItemNotFound
+        Err(error) => Err(format!("Could not inspect the API key: {error}")),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn stored_key_exists(account: &str) -> Result<bool, String> {
+    let credential = Entry::new(SERVICE, account)
+        .map_err(|error| format!("Could not access the system credential store: {error}"))?;
+    match credential.get_password() {
+        Ok(_) => Ok(true),
+        Err(Error::NoEntry) => Ok(false),
+        Err(error) => Err(format!("Could not read the API key: {error}")),
     }
 }
 
@@ -87,25 +134,45 @@ pub fn web_search_key() -> Result<Option<String>, String> {
 }
 
 pub fn web_search_key_source() -> Result<&'static str, String> {
-    match web_search_entry()?.get_password() {
-        Ok(_) => Ok("keychain"),
-        Err(Error::NoEntry) => Ok(
-            if std::env::var("BRAVE_SEARCH_API_KEY")
-                .ok()
-                .is_some_and(|key| !key.trim().is_empty())
-            {
-                "environment"
-            } else {
-                "none"
-            },
-        ),
-        Err(error) => Err(format!("Could not read the search API key: {error}")),
-    }
+    source_from_presence(stored_key_exists("brave-search"), || {
+        std::env::var("BRAVE_SEARCH_API_KEY")
+            .ok()
+            .is_some_and(|key| !key.trim().is_empty())
+    })
 }
 
 pub fn remove_web_search_key() -> Result<(), String> {
     match web_search_entry()?.delete_credential() {
         Ok(()) | Err(Error::NoEntry) => Ok(()),
         Err(error) => Err(format!("Could not remove the search API key: {error}")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_prefers_saved_metadata_without_loading_environment() {
+        assert_eq!(
+            source_from_presence(Ok(true), || panic!("saved key takes precedence")).unwrap(),
+            "keychain"
+        );
+        assert_eq!(
+            source_from_presence(Ok(false), || true).unwrap(),
+            "environment"
+        );
+        assert_eq!(source_from_presence(Ok(false), || false).unwrap(), "none");
+    }
+
+    #[test]
+    fn metadata_errors_remain_errors_instead_of_hiding_saved_credentials() {
+        assert_eq!(
+            source_from_presence(Err("Keychain unavailable".into()), || {
+                panic!("do not silently switch credentials after a Keychain error")
+            })
+            .unwrap_err(),
+            "Keychain unavailable"
+        );
     }
 }
