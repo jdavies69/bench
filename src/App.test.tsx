@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -17,7 +17,7 @@ const site = { pages: [{ path: "index.html", html: "<h1>Local site</h1>" }], css
 const snapshot = {
   outputs: [{ id: "chat", label: "Chat", implemented: true, workspace: "conversation" }, { id: "website", label: "Website", implemented: true, workspace: "canvas" }],
   projects: [{ id: "miscellaneous", name: "Miscellaneous", isSystem: true }], conversations: [],
-  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [], webSearchKeySource: "none", webSearchStatus: "unavailable",
+  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [{ id: "openrouter", label: "OpenRouter", model: "test-model", keySource: "keychain" }], webSearchKeySource: "none", webSearchStatus: "unavailable",
 };
 
 beforeEach(() => {
@@ -140,5 +140,52 @@ describe("Website authorization flow", () => {
     await waitFor(() => expect(nativeMock.restoreWebsite).toHaveBeenCalledWith("site-1", 1, undefined));
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(nativeMock.createMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("Fresh install and input safety", () => {
+  it("saves the request before connection setup without making a model call", async () => {
+    const disconnected = { ...snapshot, providers: [{ ...snapshot.providers[0], keySource: "none" }] };
+    nativeMock.snapshot.mockResolvedValue(disconnected);
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...disconnected, conversations: [conversation] }); return conversation; });
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep this idea");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(screen.getByLabelText("OpenRouter API key")).toBeTruthy();
+    expect(nativeMock.createMessage).toHaveBeenCalledWith(null, "Keep this idea", "auto");
+    expect(nativeMock.stream).not.toHaveBeenCalled();
+    expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    cleanup();
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Build a website" }));
+    await screen.findByText("Response not completed.");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(nativeMock.createMessage).toHaveBeenCalledTimes(1);
+  });
+  it("keeps an unanswered saved request when Retry needs a connection", async () => {
+    nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [conversation], providers: [{ ...snapshot.providers[0], keySource: "none" }] });
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Build a website" }));
+    await screen.findByText("Response not completed.");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
+    expect(nativeMock.createMessage).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.getAllByText("Build a website").length).toBeGreaterThan(0);
+  });
+  it("does not submit Enter while an input method is composing", async () => {
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    const input = screen.getByRole("textbox", { name: "Message" });
+    await user.type(input, "Draft");
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });
+    expect(nativeMock.createMessage).not.toHaveBeenCalled();
+    expect((input as HTMLTextAreaElement).value).toBe("Draft");
   });
 });

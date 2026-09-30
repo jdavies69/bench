@@ -403,6 +403,7 @@ fn parse_search_event(
     }
     let value: Value = serde_json::from_str(data)
         .map_err(|_| "The provider sent an unreadable stream event.".to_owned())?;
+    check_completion_reason(kind, &value)?;
     if value
         .pointer("/error/message")
         .and_then(Value::as_str)
@@ -476,6 +477,26 @@ fn valid_source_url(url: &str) -> bool {
     })
 }
 
+fn check_completion_reason(kind: ProviderId, value: &Value) -> Result<(), String> {
+    let reason = if kind == ProviderId::Anthropic {
+        value.pointer("/delta/stop_reason")
+    } else {
+        value.pointer("/choices/0/finish_reason")
+    }
+    .and_then(Value::as_str);
+    match reason {
+        Some("length" | "max_tokens") => Err(format!(
+            "{} reached its response limit before finishing. Retry with a shorter request.",
+            kind.label()
+        )),
+        Some("content_filter") => Err(format!(
+            "{} filtered the response before finishing. Rephrase your request and retry.",
+            kind.label()
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn parse_event(
     kind: ProviderId,
     data: &str,
@@ -487,6 +508,7 @@ fn parse_event(
     }
     let value: serde_json::Value = serde_json::from_str(data)
         .map_err(|_| "The provider sent an unreadable stream event.".to_owned())?;
+    check_completion_reason(kind, &value)?;
     if value
         .pointer("/error/message")
         .and_then(|value| value.as_str())
@@ -897,6 +919,97 @@ mod tests {
         let (endpoint, server) = mock_server(dropped, Duration::ZERO);
         assert!(run_mock(mock_provider(endpoint, Duration::from_secs(2))).is_err());
         server.join().unwrap();
+    }
+
+    #[test]
+    fn provider_declared_incomplete_streams_fail_even_with_normal_terminators() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        for (kind, search, reason, expected) in [
+            (ProviderId::OpenAI, false, "length", "response limit"),
+            (ProviderId::Xai, false, "content_filter", "filtered"),
+            (ProviderId::OpenRouter, true, "length", "response limit"),
+            (ProviderId::OpenRouter, true, "content_filter", "filtered"),
+            (ProviderId::Anthropic, false, "max_tokens", "response limit"),
+        ] {
+            let body = if kind == ProviderId::Anthropic {
+                format!(
+                    "data: {{\"type\":\"content_block_delta\",\"delta\":{{\"type\":\"text_delta\",\"text\":\"Partial answer\"}}}}\n\n\
+                     data: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"{reason}\"}}}}\n\n\
+                     data: {{\"type\":\"message_stop\"}}\n\n"
+                )
+            } else {
+                format!(
+                    "data: {{\"choices\":[{{\"delta\":{{\"content\":\"Partial answer\"}}}}]}}\n\n\
+                     data: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{reason}\"}}]}}\n\n\
+                     data: [DONE]\n\n"
+                )
+            };
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            let (endpoint, server) = mock_server(response, Duration::ZERO);
+            let mut provider = mock_provider(endpoint, Duration::from_secs(3));
+            provider.kind = kind;
+            runtime.block_on(async {
+                let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+                let result = if search {
+                    provider
+                        .stream_chat_with_web_search(Vec::new(), tx, false)
+                        .await
+                        .map(|_| ())
+                } else {
+                    provider.stream_chat(Vec::new(), tx).await
+                };
+                assert!(result.unwrap_err().contains(expected));
+                assert_eq!(rx.recv().await.unwrap(), "Partial answer");
+                assert!(rx.recv().await.is_none());
+            });
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn valid_website_json_with_truncation_signal_keeps_last_saved_revision() {
+        use crate::website::{self, WebsitePage, WebsiteState};
+        let root = std::env::temp_dir().join(format!("bench-truncation-{}", uuid::Uuid::new_v4()));
+        let id = uuid::Uuid::new_v4().to_string();
+        let previous = website::save(
+            &root,
+            &id,
+            &WebsiteState {
+                pages: vec![WebsitePage {
+                    path: "index.html".into(),
+                    html: "<h1>Saved</h1>".into(),
+                }],
+                css: "body{color:black}".into(),
+                revision: 1,
+                request_count: 1,
+            },
+        )
+        .unwrap();
+        let patch = r#"{"files":{"style.css":"body{color:red}"}}"#;
+        let delta = serde_json::json!({"choices":[{"delta":{"content":patch}}]});
+        let body = format!("data: {delta}\n\ndata: {{\"choices\":[{{\"finish_reason\":\"length\"}}]}}\n\ndata: [DONE]\n\n");
+        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+        let (endpoint, server) = mock_server(response, Duration::ZERO);
+        let provider = mock_provider(endpoint, Duration::from_secs(3));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let result = runtime.block_on(website::generate(
+            &provider,
+            Some(&previous),
+            &["Build".into(), "Revise".into()],
+        ));
+        assert!(result.unwrap_err().contains("response limit"));
+        let relaunched = website::load(&root, &id).unwrap().unwrap();
+        assert_eq!(relaunched.css, previous.css);
+        assert_eq!(relaunched.request_count, 1);
+        assert_eq!(website::list_revisions(&root, &id).unwrap().len(), 1);
+        server.join().unwrap();
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     fn chunked_server(chunks: Vec<Vec<u8>>, pause: Duration) -> (String, thread::JoinHandle<()>) {

@@ -2,6 +2,8 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Target Apple Silicon first with a Bench paid plan and included usage for public release. | User-selected release model; supersedes deferring accounts/billing. Price, allowance, backend services, and credentials remain pending. Keep BYOK working until managed access is real. |
+| 2026-09-30 | Remove the Auto trigger outline while retaining the compact list. | User requested the sparse borderless composer control. |
 | 2026-09-30 | Use the user-selected compact output list with neutral line icons, a checkmark, and a Coming later section. | Replace stock menu styling while keeping Bench sparse; preserve existing placeholder behavior and support keyboard navigation and window-aware placement. |
 | 2026-09-30 | Inspect macOS Keychain metadata for connection status; read secret data only when using the provider. | Opening Bench or refreshing Settings should not request password access. Keep credentials and their access controls intact; stable signing remains necessary across app updates. |
 | 2026-09-30 | Permit only same-page section navigation in Website previews, explicitly bound to `about:srcdoc`. | Bare fragments inherit the application base URL and leave the preview; external destinations, scripts, and network access remain blocked. |

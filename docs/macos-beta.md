@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-Bench's local builds are development artifacts. The September 30 installed app was Apple Silicon (`arm64`), ad-hoc signed, with no Developer ID team. External distribution is pending signing, notarization, and a clean-machine installation. CI validates source; it does not currently produce a distributable beta.
+Bench's local builds are development artifacts. The September 30 installed app was Apple Silicon (`arm64`), ad-hoc signed, with no Developer ID team. External distribution is pending signing, notarization, and a clean-machine installation. CI validates source; the manual packaging workflow produces development-only artifacts. The selected public release is Apple Silicon first with a managed Bench paid plan and included usage; current BYOK functionality does not satisfy that release. See [public release gates](public-release.md).
 
 The installed bundle declares macOS 10.13 through Tauri's default. That is metadata, not a tested compatibility claim. Select and configure an actual minimum macOS version after testing. Intel support is also unverified; label the initial artifact Apple Silicon unless an Intel/universal build is tested.
 
@@ -12,10 +12,10 @@ Run on macOS with Node and Xcode command-line tools:
 
 ```sh
 node scripts/check-macos-beta.mjs /Applications/Bench.app
-node --test scripts/check-macos-beta.test.mjs
+node --test scripts/*.test.mjs
 ```
 
-The verifier reads the supplied bundle and checks identity, executable, signature integrity, Developer ID authority/team, hardened runtime, Apple Silicon architecture, Gatekeeper notarization, and the stapled ticket. It performs no signing, stapling, launch, or bundle modification. Exit 0 means these artifact checks passed; exit 1 means a check failed; exit 2 means incorrect invocation. It requires Apple Silicon support and is not an Intel-only release validator. A pass does not establish clean-machine behavior, compatibility, Website factual quality, or live search behavior.
+The verifier reads the supplied bundle and checks identity, executable, signature integrity, Developer ID authority/team, hardened runtime, architecture, Gatekeeper notarization, and the stapled ticket. It defaults to Apple Silicon; `--architecture x86_64` or `--architecture universal` validates another explicitly selected target. Optional `--version`, `--minimum-macos`, and `--team-id` check exact release expectations. It performs no signing, stapling, launch, or bundle modification. Exit 0 means these artifact checks passed; exit 1 means a check failed; exit 2 means incorrect invocation. A pass does not establish clean-machine behavior, compatibility, Website factual quality, or live search behavior.
 
 ## Signing and notarization preparation
 
@@ -37,4 +37,4 @@ Use a separate Mac or clean test account with no existing Bench database, Keycha
 6. Live OpenRouter search still requires separate specific authorization. Record citations and failure handling only after an authorized run.
 7. Replace the app with the next signed build and verify existing local data and Keychain access survive. Test Keychain access across the development-to-Developer-ID signing transition before recommending upgrades to existing users.
 
-Record each check as passed, failed, or pending with the exact artifact and environment. Share only after the artifact checks and required manual acceptance pass. No managed accounts, billing, automatic updater, deployment integration, or additional outputs are part of this beta preparation.
+Record each check as passed, failed, or pending with the exact artifact and environment. Share only after the artifact checks and required manual acceptance pass. These packaging checks do not validate managed accounts, billing, or included-usage enforcement; those are additional public-release requirements. Automatic updating and additional outputs remain outside this packaging scope.

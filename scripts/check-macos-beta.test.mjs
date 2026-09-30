@@ -10,6 +10,8 @@ function fixture(overrides = {}) {
     const values = {
       'Print :CFBundleIdentifier': 'app.bench.desktop',
       'Print :CFBundleExecutable': 'bench',
+      'Print :CFBundleShortVersionString': '0.0.1',
+      'Print :LSMinimumSystemVersion': '11.0',
       'codesign --verify': '',
       'codesign --display': 'Authority=Developer ID Application: Example (TEAM123)\nAuthority=Developer ID Certification Authority\nTeamIdentifier=TEAM123\nCodeDirectory v=20500 flags=0x10000(runtime)\n',
       'lipo -archs': 'x86_64 arm64',
@@ -49,7 +51,18 @@ test('command failures do not masquerade as successful evidence', () => {
   const { options } = fixture({ 'codesign --verify': { status: null, output: '', error: 'spawn codesign ENOENT' }, 'lipo -archs': { status: 1, output: 'arm64' } });
   const checks = inspectBundle('/tmp/Bench.app', options);
   assert.equal(checks.find((check) => check.name === 'Signature integrity').passed, false);
-  assert.equal(checks.find((check) => check.name === 'Apple Silicon architecture').passed, false);
+  assert.equal(checks.find((check) => check.name === 'Release architecture').passed, false);
+});
+
+test('release expectations reject wrong version, minimum OS, team, and incomplete universal binaries', () => {
+  const { options } = fixture({ 'lipo -archs': { status: 0, output: 'arm64' } });
+  const checks = inspectBundle('/tmp/Bench.app', { ...options, architecture: 'universal', version: '0.1.0', minimumMacOS: '12.0', teamId: 'OTHERTEAM' });
+  assert.deepEqual(checks.filter((check) => !check.passed).map((check) => check.name), ['Release version', 'Minimum macOS', 'Expected signing team', 'Release architecture']);
+});
+
+test('Intel-only artifacts can be checked explicitly without claiming universal support', () => {
+  const { options } = fixture({ 'lipo -archs': { status: 0, output: 'x86_64' } });
+  assert.equal(inspectBundle('/tmp/Bench.app', { ...options, architecture: 'x86_64', version: '0.0.1', minimumMacOS: '11.0', teamId: 'TEAM123' }).every((check) => check.passed), true);
 });
 
 test('missing bundle and unsafe executable stop before assessment', () => {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Markdown } from "./components/Markdown";
@@ -37,7 +38,7 @@ function Composer({ value, onChange, onSend, busy, outputType, setOutputType, ce
   useEffect(() => { if (textarea.current) { textarea.current.style.height = "auto"; textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 160)}px`; } }, [value]);
   return <form className={`composer ${centered ? "composer-centered" : ""}`} onSubmit={(event) => { event.preventDefault(); onSend(); }}>
     <button type="button" className="composer-add" title="Attachments are coming later" aria-label="Add attachment (coming later)" disabled><Icon name="plus" size={22} /></button>
-    <textarea ref={textarea} rows={1} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); onSend(); } }} placeholder="Describe what you want to make..." aria-label="Message" />
+    <textarea ref={textarea} rows={1} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); onSend(); } }} placeholder="Describe what you want to make..." aria-label="Message" />
     <OutputPicker value={outputType} onChange={setOutputType} definitions={definitions} />
     <button className="send-button" type="submit" disabled={!value.trim() || busy} aria-label="Send message"><Icon name="arrow" size={21} /></button>
   </form>;
@@ -59,7 +60,9 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError }
   snapshot: Snapshot; onClose: () => void; onSaveBehaviors: (execution: ExecutionBehavior, approval: ApprovalBehavior) => void;
   onRefresh: () => Promise<void>; onError: (message: string) => void;
 }) {
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(() => snapshot.providers.find((item) => item.id === snapshot.settings.modelProvider && item.keySource === "none")?.id ?? null);
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => { let live = true; if (isTauri()) void getVersion().then((value) => { if (live) setVersion(value); }).catch(() => {}); return () => { live = false; }; }, []);
   const [models, setModels] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const keyInput = useRef<HTMLInputElement>(null);
@@ -74,7 +77,7 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError }
       <div className="setting-row"><div className="setting-label">Execution</div><div className="segmented" role="group" aria-label="Execution behavior">{([ ["discuss", "Discuss first"], ["balanced", "Balanced"], ["just_do_it", "Just do it"] ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={snapshot.settings.executionBehavior === value} onClick={() => onSaveBehaviors(value, snapshot.settings.approvalBehavior)}>{label}</button>)}</div></div>
       <div className="setting-row"><div className="setting-label">Approvals</div><div className="segmented" role="group" aria-label="Approval behavior">{([ ["always", "Always ask"], ["important", "Important actions"], ["autonomous", "Autonomous"] ] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={snapshot.settings.approvalBehavior === value} onClick={() => onSaveBehaviors(snapshot.settings.executionBehavior, value)}>{label}</button>)}</div></div>
     </section>
-    <section className="settings-section"><h2>Connections</h2><div className="connection-list">{snapshot.providers.map((item) => <div className="connection" key={item.id}>
+    <section className="settings-section"><h2>Connections</h2><p className="quiet-note">Connect your own provider key to use Chat and Website. Requests are billed by your provider.</p><div className="connection-list">{snapshot.providers.map((item) => <div className="connection" key={item.id}>
       <button className="connection-row" type="button" aria-expanded={selectedProvider === item.id} onClick={() => setSelectedProvider(selectedProvider === item.id ? null : item.id)}><span className="connection-name">{item.label}{snapshot.settings.modelProvider === item.id && <span className="active-dot" title="Active provider" />}</span><span className="connection-state">{item.keySource === "none" ? "Not connected" : "Connected"}</span><Icon name="chevron" size={16} /></button>
       {selectedProvider === item.id && <div className="connection-detail">
         <form onSubmit={(event) => { event.preventDefault(); const key = keyInput.current?.value ?? ""; if (!key.trim()) return; void perform(async () => { await native.saveProviderKey(item.id, key); if (keyInput.current) keyInput.current.value = ""; }); }}><label htmlFor="provider-key">API key</label><div className="field-row"><input ref={keyInput} id="provider-key" type="password" autoComplete="off" spellCheck={false} placeholder={item.keySource === "keychain" ? "Replace key" : "Paste API key"} aria-label={`${item.label} API key`} /><button type="submit" disabled={saving}>{item.keySource === "keychain" ? "Replace" : "Connect"}</button></div></form>
@@ -85,6 +88,7 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError }
       <div className="web-search-row"><div><div className="setting-label">Web search</div><div className="advanced-state">{snapshot.webSearchStatus === "openrouter" ? "Available with OpenRouter" : snapshot.webSearchStatus === "off" ? "Off" : "Unavailable"}</div></div><button type="button" className="setting-switch" role="switch" aria-label="Web search" aria-checked={snapshot.settings.webSearchBackend !== "off"} disabled={saving} onClick={() => void perform(() => native.configureWebSearch(snapshot.settings.webSearchBackend === "off" ? "auto" : "off", ""))}><span /></button></div>
       <details><summary>Model IDs <Icon name="chevron" size={16} /></summary><div className="model-list">{snapshot.providers.map((item) => <form key={item.id} className="model-row" onSubmit={(event) => { event.preventDefault(); void perform(() => native.updateModel(item.id, models[item.id] ?? item.model)); }}><label htmlFor={`model-${item.id}`}>{item.label}</label><input id={`model-${item.id}`} value={models[item.id] ?? item.model} onChange={(event) => setModels((old) => ({ ...old, [item.id]: event.target.value }))} spellCheck={false} /><button type="submit" disabled={saving || (models[item.id] ?? item.model) === item.model}>Save</button></form>)}</div></details>
     </section>
+    <section className="settings-section"><h2>About Bench</h2>{version && <p className="quiet-note">Version {version}</p>}<p className="quiet-note">Conversations and websites are saved on this Mac. API keys are stored in macOS Keychain.</p><p className="quiet-note">Your requests and relevant conversation content are sent to the selected provider. Web search uses OpenRouter when enabled and available. Bench does not currently track provider spend; check usage with your provider.</p></section>
   </section>;
 }
 function Sidebar({ snapshot, collapsed, onToggle, expanded, setExpanded, current, selectedId, onNew, onSearch, onSelect, onSettings, onCreateProject }: {
@@ -222,8 +226,14 @@ function App() {
     catch { setError("Couldn’t restore this version. Your current website is still here."); }
     finally { setBusy(false); setBusyId(null); }
   };
+  const ensureConnection = (saved = false) => {
+    if (!snapshot) { setError("Bench is still loading. Your draft is here; try again shortly."); return false; }
+    if (!snapshot.providers.some((item) => item.id === snapshot.settings.modelProvider && item.keySource !== "none")) { setView("settings"); setError(saved ? "Connect a provider to continue. Your request is saved." : "Connect a provider to continue. Your draft is still here."); return false; }
+    return true;
+  };
   const send = async () => {
     if (!draft.trim() || busy) return;
+    if (!snapshot) { ensureConnection(); return; }
     const origin = selectedRef.current;
     const request = draft.trim();
     setBusy(true); setBusyId(origin); setPendingReview(null); setError(""); setResponse(""); setToolStatus(""); setFailedId(null);
@@ -237,7 +247,12 @@ function App() {
         const loaded = await native.messages(created.id);
         if (selectedRef.current === created.id) setMessages(loaded);
       }
-      await refresh(); await runOutput(created);
+      await refresh();
+      if ((created.outputType === "chat" || created.outputType === "website") && !ensureConnection(true)) {
+        if (selectedRef.current === created.id) { setFailedId(created.id); setFailedReason("Request saved. Connect a provider in Settings to continue."); }
+        return;
+      }
+      await runOutput(created);
       const loaded = await native.messages(created.id);
       if (selectedRef.current === created.id) { setMessages(loaded); setToolActivity(await native.toolActivity(created.id)); setToolStatus(""); setResponse(""); }
       await refresh();
@@ -249,6 +264,7 @@ function App() {
   const retry = async () => {
     if (!failedId || busy || !snapshot) return;
     const conversation = snapshot.conversations.find((item) => item.id === failedId); if (!conversation) return;
+    if (!ensureConnection(true)) return;
     setBusy(true); setBusyId(conversation.id); setPendingReview(null); setResponse(""); setToolStatus(""); setFailedId(null);
     try { await runOutput(conversation); if (selectedRef.current === conversation.id) { setMessages(await native.messages(conversation.id)); setToolActivity(await native.toolActivity(conversation.id)); setToolStatus(""); setResponse(""); } await refresh(); } catch (e) { if (selectedRef.current === conversation.id) { setToolActivity(await native.toolActivity(conversation.id).catch(() => [])); setToolStatus(""); setFailedId(conversation.id); setFailedReason(responseError(e)); setResponse(""); } } finally { setBusy(false); setBusyId(null); }
   };

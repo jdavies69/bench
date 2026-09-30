@@ -1,0 +1,52 @@
+# Managed desktop integration contract
+
+Status: implementation proposal, September 30, 2026. The user selected an Apple Silicon public release with a monthly Bench plan and included usage. Identity provider, service domain, and plan economics remain unresolved. This document does not implement sign-in or authorize payments or model calls.
+
+## Smallest real integration
+
+Keep the existing local database, conversation identifiers, Website revision policy, and four BYOK providers. Add a separate `ModelAccessMode` (`byok`, `managed`) instead of a fifth `ProviderId`. Existing installations migrate to `byok`; the first public managed onboarding may select managed only after explaining the service data flow and successfully establishing an account session. Sign-out retains local projects, history, websites, and existing provider keys. Never silently fall back to BYOK or charge its provider after a managed request fails.
+
+Rust owns a shared `ManagedSession` and `ManagedProvider`. The provider implements `ModelProvider::stream_chat` so Website generation consumes the same path. Keep the existing complete-only assistant-message commit and last-good Website revision behavior. A provider factory must replace the direct `HttpProvider` creation in both `commands.rs::stream_response` and `commands.rs::generate_website`. Website action approval remains mandatory according to local policy, regardless of paid entitlement.
+
+Managed request context must bind account, local conversation, saved user-message ID, output type, and a persisted attempt ID. Create the attempt before opening the network connection, keyed to the saved request and canonical context digest. A restart or ambiguous network failure queries that same attempt; it does not create a new potentially billable request. A new attempt is allowed only after the service confirms the previous attempt did not start, or after an explicit new generation following a terminal failure. The service rejects attempt reuse with changed context. Its ledger authorizes spending, not the desktop allowance display.
+
+## System-browser authentication
+
+Use Authorization Code with PKCE S256 as a public native client. No client secret belongs in a desktop binary. Rust creates cryptographically random verifier/state, retains them only for one bounded pending flow, binds an ephemeral listener to `127.0.0.1`, and opens the fixed authorization URL in the system browser. Use an IP literal loopback redirect, not `localhost`, and do not listen on all interfaces. The server must register this native client with exact callback path and permit the ephemeral port. Do not invent this flow if the chosen identity provider cannot support it: choose its supported native-client SDK or service broker and revise the contract before coding.
+
+Accept only the expected method/path, a bounded callback body/query, exact single-use state, and authorization code or typed denial. Exchange code over HTTPS with the retained verifier and same redirect URI. Close the listener on success, denial, timeout, cancellation, and app exit. A wrong-state request must not consume a legitimate pending flow. Auth codes, access tokens, refresh tokens, verifier, and user email must never appear in app logs, callback response HTML, frontend events, or error text. For OpenID Connect, validate issuer, audience, nonce, signature, and expiration before treating an ID token as identity; access-token authorization remains the service's job.
+
+The service returns a short-lived access credential and rotating refresh credential. Rust holds access credentials in memory; it stores refresh credentials in a separate Bench-managed Keychain service/account scoped to production issuer and session identity. Do not reuse or delete `app.bench.desktop.api-key` BYOK entries. Serialize refresh so parallel Chat/Website/account requests cannot replay a rotating credential. Persist the successor securely before replacing in-memory state. A Keychain write failure fails closed and requires sign-in recovery. Refresh rejection clears managed credentials and preserves local work. Local sign-out clears managed credentials even if remote revocation is unavailable; revoke server session when reachable. Service refresh rotation needs documented retry/grace semantics for lost responses, rather than client guessing.
+
+Production endpoint origin and auth issuer are compiled from reviewed release configuration, never supplied by React or a conversation. Require HTTPS, normal certificate verification, and disabled HTTP redirects for authenticated requests. Do not send credentials across origins. Restrict browser Checkout/portal URLs to configured HTTPS destinations and independently validate callback state. Runtime insecure localhost overrides belong only to an explicit debug/test build; release builds must refuse them. Environment overrides must not redirect production tokens. Do not ship a sign-in action while the production authority is unspecified.
+
+## Desktop/service wire boundary
+
+| Operation | Required behavior |
+| --- | --- |
+| Browser authorization | Fixed reviewed issuer, public native client ID, code + S256 challenge, state, exact redirect, minimal scope; no tokens through React. |
+| Code exchange and refresh | Rust-only HTTPS token request; rotating refresh; explicit expiry; generic user-facing failures. Endpoint names depend on chosen auth provider. |
+| Session revocation | Authenticated service revocation; local cleanup always works; no history deletion. |
+| `GET /v1/entitlement` | Account identity, access status, plan display name, integer allowance unit, available/reserved amounts, paid period end, issue/recovery code. Cached state is dated and cannot authorize inference. |
+| `POST /v1/generations` | Bearer session, stable attempt ID, canonical request/context, Chat or Website output, bounded content; server-selected allowed model and output cap; atomic reserve before provider call. |
+| `GET /v1/generations/:attempt_id` | Account-scoped terminal/pending status and recovery; support replay of a complete response for local persistence recovery. No account may query another account's attempt. |
+| Generation stream | Versioned SSE events: `started` with attempt ID, bounded `delta`, terminal `completed`, or typed `failed`. Terminal completion confirms provider completion; settlement may still be pending. EOF without completion is failure. |
+| Checkout/portal | Rust requests a server-created hosted session URL; browser return never changes entitlement. Refresh entitlement after verified service payment state. |
+
+Keep SSE parsing incremental and bounded for total bytes, line/event bytes, generated output, and timeout. Rust must reject malformed events, mismatched request IDs, unknown event versions, or stream truncation without committing an assistant reply or Website revision. A client disconnect does not release a server reservation until cost reconciliation. Do not replay the provider request merely because the app failed to save a completed response; retrieve the account-scoped completed attempt.
+
+Search is a separate tool boundary. Managed server search must be explicitly capped and metered by the same attempt, with citations returned as structured evidence. Do not expose the Bench OpenRouter key to desktop search, and do not accidentally route managed search through the user's BYOK key. Until managed search is implemented and verified, managed mode should report search unavailable honestly rather than pretending the existing direct OpenRouter tool works.
+
+## React contract and quiet Settings
+
+Expose only redacted `ManagedAccountStatus` and `ManagedEntitlement` through `native.ts`: signed-out/signing-in/signed-in/session-expired, safe account label, configured availability, plan state, allowance unit and amounts, paid period end, last refresh timestamp, and recovery reason. No token, authorization code, arbitrary auth URL, provider secret, or raw server error enters React. Native commands: begin/cancel sign-in, sign-out, refresh account, select access mode, create checkout, open manage-plan. Those commands must perform real work and remain absent from release UI until their configured backend is usable.
+
+Settings adds Account and Usage only when the service is configured. Usage uses the ledger's actual customer-facing unit, includes held/reserved usage, and avoids invented dollars or request counts. Show cap exhaustion, renewal failure, offline/stale status, and session expiry with the exact working recovery action. Plan price/allowance and checkout copy wait for approved economics. Existing Connections remain discoverable until managed onboarding works; afterward move BYOK into Advanced while retaining an explicit fallback route. The composer stays sparse. Save requests locally before connection/entitlement failures and offer Retry without duplicating the saved prompt.
+
+## Dependencies and release acceptance
+
+Implementation dependencies: chosen native-compatible identity provider, registered client/callback strategy, Bench-controlled HTTPS domain and issuer, stable Developer ID signing, production refresh/revocation policy, approved monthly plan and allowance unit, trusted service deployment, server-side OpenRouter account/key/spend cap, Stripe test configuration, and published privacy/terms. None can be replaced by a fake login button or frontend-only allowance counter.
+
+Tests need fake token/stream servers and temporary credential stores: wrong/replayed state, PKCE failure, callback timeout, refresh concurrency/rejection/lost response, Keychain successor failure, release HTTP/origin override refusal, redirect refusal, stale entitlement, exhausted allowance, attempt/context conflict, disconnect and restart recovery, malformed/oversized SSE, and BYOK behavior/history preservation. Native acceptance additionally covers system-browser return, Keychain/relaunch, clean Apple Silicon install, managed Chat and Website, cap/recovery, sign-out offline local history, and test-mode Checkout. Paid live generation and production payments each need specific authorization.
+
+Primary security sources reviewed: [RFC 8252 native app external-browser and loopback flow](https://www.rfc-editor.org/rfc/rfc8252) and [RFC 9700 OAuth security best practice, including PKCE and refresh-token protection](https://www.rfc-editor.org/rfc/rfc9700). The concrete service and UI choices above are Bench implementation recommendations rather than claims that these standards prescribe Bench's billing API.

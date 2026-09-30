@@ -2,12 +2,13 @@
 
 ## Now
 
+- Build the Apple Silicon public release around a Bench paid plan with included usage. Implement/test durable server-side metering first; account/backend selection, plan economics, service credentials, and signing access are pending. See `docs/public-release.md` and `docs/managed-desktop-contract.md`.
 - Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
 - Review the Website output for usability and factual accuracy across more specifically authorized live revisions. The existing saved version and section navigation have been reviewed without paid calls.
 
 ## Current handoff
 
-- The installed app contains code commit `9105291`, packaged and installed on September 30 at `/Applications/Bench.app`; a recursive comparison confirms it matches `src-tauri/target/release/bundle/macos/Bench.app`. Later documentation commits do not change the app code. The earlier installation remains backed up at `/private/tmp/Bench-prior-20260930.app`.
+- The installed app was rebuilt September 30 with borderless Auto, Settings About/version/data-flow copy, missing-connection recovery, IME Enter handling, and provider truncation rejection. Native Settings and About were visually verified; no paid calls were made. Prior copies were moved reversibly into `/Users/jfd/.Trash`; `/Applications/Bench.app` is the current installation.
 - The approved compact output picker is implemented and visually checked in blank chat and an active conversation. It uses neutral icons, a selected checkmark, and a Coming later section. Native keyboard selection, Escape, and outside-click dismissal were verified without sending requests. The menu opens above when it fits, otherwise below or with scrolling; resize containment has regression coverage. Existing placeholder outputs remain selectable.
 - Computer Use worked this session. Blank chat, a saved active conversation, expanded/collapsed sidebar, Settings, and saved Website version 3 were visually reviewed. Website Services navigation stayed at `about:srcdoc#services`, scrolled, and visibly rendered the destination. No live generation/revision was run.
 - Fixed repeated startup Keychain authentication: macOS connection status now queries attributes without reading secret data. The updated app launched twice and Settings showed OpenRouter Connected without authentication. Actual model use still reads the protected credential and has not been exercised after this rebuild. Ad-hoc signatures can prompt on first secret use after updates; `security find-identity -v -p codesigning` found no valid signing identities. Stable signing remains a release prerequisite.
@@ -21,7 +22,7 @@
 
 - Expand outputs only after Website is excellent.
 - Add service connections when a concrete output flow needs them.
-- Optional accounts and monthly managed usage are designed in `docs/managed-usage-milestone.md`; implementation is deferred.
+- Cloud sync and additional integrations remain deferred. Managed account/billing work now belongs to the public-release milestone.
 
 ## Completed
 
@@ -42,4 +43,4 @@
 - Case-insensitive Website filename collisions are rejected before save; regression tests verify last-good preservation, history, and restart-safe capitalization renames.
 - A read-only Mac beta checker and clean-machine acceptance guide are in place; `npm test` includes its fixture tests.
 - Compact output picker replaces the stock dropdown; five regressions cover selection, keyboard/type-ahead, dismissal, deferred outputs, and resize containment.
-- 18 frontend, 5 beta-checker, and 60 Rust tests, frontend build, formatting, Clippy, and packaged app build passed for the compact-picker milestone. GitHub CI passed for the previous milestone (`1c37d18`); check the newest pushed HEAD separately. External distribution remains unsigned/unnotarized.
+- 21 frontend, 11 release-tool, and 62 Rust tests, frontend build, formatting, Clippy, and packaged app build passed for the public-release preparation milestone. Rust loopback tests require execution outside the restrictive sandbox. External distribution remains unsigned/unnotarized; preflight correctly fails missing minimum macOS and Developer ID identity.

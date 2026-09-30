@@ -1,0 +1,54 @@
+name: Development packaging (unsigned)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: macos-14
+    env:
+      # Ad-hoc signing only. No signing/notarization credentials are supplied.
+      APPLE_SIGNING_IDENTITY: '-'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm test
+      - run: cargo fmt --all -- --check
+        working-directory: src-tauri
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        working-directory: src-tauri
+      - run: cargo test --locked --all-targets --all-features
+        working-directory: src-tauri
+      - run: npm run tauri build -- --target aarch64-apple-darwin --bundles app,dmg
+      - name: Preserve development artifact and source evidence
+        shell: bash
+        run: |
+          mkdir -p packaging-evidence
+          ditto -c -k --sequesterRsrc --keepParent src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Bench.app packaging-evidence/Bench-development-arm64.app.zip
+          cp src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg packaging-evidence/
+          git rev-parse HEAD > packaging-evidence/source-commit.txt
+          sw_vers > packaging-evidence/build-system.txt
+          node --version > packaging-evidence/node-version.txt
+          rustc --version > packaging-evidence/rust-version.txt
+          printf '%s\n' 'DEVELOPMENT ONLY: ad-hoc signed, not notarized, not approved for distribution.' > packaging-evidence/STATUS.txt
+          shasum -a 256 packaging-evidence/*.zip packaging-evidence/*.dmg > packaging-evidence/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bench-development-arm64-${{ github.sha }}
+          path: packaging-evidence/
+          if-no-files-found: error
+          retention-days: 14
