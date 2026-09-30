@@ -34,6 +34,7 @@ pub struct Message {
     pub role: String,
     pub content: String,
     pub created_at: String,
+    pub attachments: Vec<crate::attachments::AttachmentMetadata>,
 }
 
 /// Product-facing tool history excludes debugging payloads and source JSON.
@@ -167,6 +168,7 @@ pub fn initialize(conn: &Connection) -> Result<(), String> {
         [],
     )
     .map_err(|e| e.to_string())?;
+    crate::attachments::initialize(conn)?;
     Ok(())
 }
 
@@ -312,11 +314,22 @@ pub fn update_model(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn create_user_message(
     conn: &mut Connection,
     conversation_id: Option<&str>,
     content: &str,
     output_type: &str,
+) -> Result<Conversation, String> {
+    create_user_message_with_attachments(conn, conversation_id, content, output_type, &[])
+}
+
+pub fn create_user_message_with_attachments(
+    conn: &mut Connection,
+    conversation_id: Option<&str>,
+    content: &str,
+    output_type: &str,
+    attachments: &[crate::attachments::StagedAttachment],
 ) -> Result<Conversation, String> {
     let content = content.trim();
     if content.is_empty() {
@@ -387,11 +400,13 @@ pub fn create_user_message(
         .map_err(|e| e.to_string())?;
         id
     };
+    let message_id = Uuid::new_v4().to_string();
     tx.execute(
         "INSERT INTO messages(id, conversation_id, role, content) VALUES (?1, ?2, 'user', ?3)",
-        params![Uuid::new_v4().to_string(), id, content],
+        params![message_id, id, content],
     )
     .map_err(|e| e.to_string())?;
+    crate::attachments::attach_transaction(&tx, &message_id, attachments)?;
     tx.execute(
         "UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?1",
         [&id],
@@ -431,12 +446,26 @@ pub fn messages(conn: &Connection, conversation_id: &str) -> Result<Vec<Message>
                 role: row.get(2)?,
                 content: row.get(3)?,
                 created_at: row.get(4)?,
+                attachments: Vec::new(),
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string());
-    result
+    let mut result: Vec<Message> = result?;
+    for message in &mut result {
+        message.attachments = crate::attachments::metadata(conn, &message.id)?;
+    }
+    Ok(result)
+}
+
+/// Provider context includes only selected, locally persisted attachment content.
+pub fn model_messages(conn: &Connection, conversation_id: &str) -> Result<Vec<Message>, String> {
+    let mut saved = messages(conn, conversation_id)?;
+    for message in &mut saved {
+        message.content = crate::attachments::context(conn, message)?;
+    }
+    Ok(saved)
 }
 
 pub fn save_assistant(
@@ -648,6 +677,64 @@ pub fn project_by_name(conn: &Connection, name: &str) -> Result<Option<String>, 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn attachment_message_commit_is_atomic_and_retry_safe() {
+        use crate::attachments::{AttachmentMetadata, AttachmentState, StagedAttachment};
+        let state = AttachmentState::default();
+        let file = StagedAttachment {
+            metadata: AttachmentMetadata {
+                id: uuid::Uuid::new_v4().to_string(),
+                name: "brief.txt".into(),
+                bytes: 9,
+            },
+            text: Some("reference".into()),
+            image: None,
+        };
+        let id = file.metadata.id.clone();
+        state.stage(vec![file]).unwrap();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+        super::initialize(&conn).unwrap();
+        conn.execute_batch("CREATE TRIGGER fail_message BEFORE INSERT ON message_attachments BEGIN SELECT RAISE(FAIL,'test write failure'); END;").unwrap();
+        assert!(state
+            .with_staged(std::slice::from_ref(&id), |files| {
+                super::create_user_message_with_attachments(
+                    &mut conn,
+                    None,
+                    "Use my brief",
+                    "chat",
+                    files,
+                )
+            })
+            .is_err());
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM messages", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert!(super::conversations(&conn).unwrap().is_empty());
+        conn.execute_batch("DROP TRIGGER fail_message").unwrap();
+        let saved = state
+            .with_staged(std::slice::from_ref(&id), |files| {
+                super::create_user_message_with_attachments(
+                    &mut conn,
+                    None,
+                    "Use my brief",
+                    "chat",
+                    files,
+                )
+            })
+            .unwrap();
+        assert!(state
+            .with_staged(std::slice::from_ref(&id), |_| Ok(()))
+            .is_err());
+        let messages = super::messages(&conn, &saved.id).unwrap();
+        assert_eq!(messages[0].content, "Use my brief");
+        assert_eq!(messages[0].attachments[0].name, "brief.txt");
+        assert!(super::model_messages(&conn, &saved.id).unwrap()[0]
+            .content
+            .contains("reference"));
+    }
     use super::*;
 
     #[test]

@@ -35,7 +35,7 @@ pub async fn generate_agent_output(
             agent::validate,
         )?;
         let provider = ProviderId::parse(&db::settings(&conn)?.model_provider)?;
-        let saved = db::messages(&conn, &conversation_id)?;
+        let saved = db::model_messages(&conn, &conversation_id)?;
         let count = saved.iter().filter(|m| m.role == "user").count();
         let context = saved
             .into_iter()
@@ -69,7 +69,14 @@ pub async fn generate_agent_output(
         ArtifactKind::Agent,
         agent::validate,
     )?;
-    let provider = HttpProvider::for_website(provider, key_store::active_key(provider)?, model);
+    let provider = HttpProvider::for_website(provider, key_store::active_key(provider)?, model)
+        .with_images(crate::attachments::conversation_images(
+            &*state
+                .db
+                .lock()
+                .map_err(|_| "Local database is unavailable.")?,
+            &conversation_id,
+        )?)?;
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(300),
         agent::generate(&provider, previous.as_ref(), &context, count),

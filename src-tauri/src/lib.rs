@@ -4,6 +4,9 @@ mod application;
 mod application_commands;
 mod artifact;
 mod artifact_commands;
+mod attachment_commands;
+mod attachment_extract;
+mod attachments;
 mod commands;
 mod db;
 mod grouping;
@@ -32,6 +35,7 @@ pub fn run() {
             let path = app.path().app_data_dir()?.join("bench.sqlite3");
             let conn = db::open(&path).map_err(std::io::Error::other)?;
             app.manage(updates::UpdateState::default());
+            app.manage(attachments::AttachmentState::default());
             app.manage(commands::AppState {
                 db: std::sync::Mutex::new(conn),
                 approvals: std::sync::Mutex::new(policy::ApprovalStore::default()),
@@ -42,6 +46,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            attachment_commands::choose_attachments,
+            attachment_commands::remove_staged_attachment,
             agent_commands::generate_agent_output,
             application_commands::load_application_values,
             application_commands::save_application_values,

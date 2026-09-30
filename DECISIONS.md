@@ -2,6 +2,7 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Add native selected-file attachments with local extraction and atomic message persistence. | User requested uploads across images, documents, and spreadsheets. Rust controls file selection, bounded parsing, staging and provider context; selecting does not send to a provider. PDF parsing uses bounded classic-table/Flate support with contained parser panics (release unwinding); OCR, encrypted/unsupported PDFs, and legacy XLS remain explicit limitations. |
 | 2026-09-30 | Implement Agent first as bounded native local conversation synthesis, with staged tools and final-only persistence. | Avoid adding a TypeScript/sidecar runtime for the first useful tool loop. Exact Rust approvals, four model rounds, response caps, and a 300-second deadline govern the run; web, shell, arbitrary filesystem and integrations remain unavailable. |
 | 2026-09-30 | Publish this repository as a free open-source project under MIT; use its GitHub Releases for signed updates. | Explicit user authorization supersedes a separate public binary-only repository. User delegated license selection; MIT permits reuse with simple attribution. OpenRouter usage remains user-funded. |
 | 2026-09-30 | Add automatic app updates through signed Tauri updater packages. | User requests replacing repeated DMG drag/Replace. Prepare and test local update flow; public release feed, signatures, and clean-machine install are required before claiming updates live. |

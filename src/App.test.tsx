@@ -7,6 +7,7 @@ import App from "./App";
 const nativeMock = vi.hoisted(() => ({
   snapshot: vi.fn(), messages: vi.fn(), toolActivity: vi.fn(), createMessage: vi.fn(), stream: vi.fn(), loadWebsite: vi.fn(),
   websiteRevisions: vi.fn(), generateWebsite: vi.fn(), restoreWebsite: vi.fn(), prepareWebsiteAction: vi.fn(), approveAction: vi.fn(),
+  chooseAttachments: vi.fn(), removeStagedAttachment: vi.fn(),
   configureWebSearch: vi.fn(), loadArtifact: vi.fn(), generateArtifact: vi.fn(), generateMediaOutput: vi.fn(), generateAgentOutput: vi.fn(), artifactRevisions: vi.fn(), restoreArtifact: vi.fn(), prepareArtifactAction: vi.fn(), exportArtifact: vi.fn(), saveArtifactEdits: vi.fn(),
   saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(), connectOpenRouter: vi.fn(), cancelOpenRouterConnect: vi.fn(),
   openOpenRouterUsage: vi.fn(), openOpenRouterBilling: vi.fn(),
@@ -40,6 +41,8 @@ beforeEach(() => {
   nativeMock.generateWebsite.mockResolvedValue(site);
   nativeMock.websiteRevisions.mockResolvedValue([{ revision: 1, current: true }]);
   nativeMock.configureWebSearch.mockResolvedValue(undefined);
+  nativeMock.chooseAttachments.mockResolvedValue([]);
+  nativeMock.removeStagedAttachment.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -340,4 +343,48 @@ it("does not expose provider details appended to a known media error", async () 
   nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); nativeMock.generateMediaOutput.mockRejectedValue(new Error("Could not reach image generation. secret-provider-token"));
   const user = userEvent.setup(); render(<App />); await user.click(await screen.findByRole("button", { name: created.title })); await user.click(await screen.findByRole("button", { name: "Retry" }));
   await screen.findByText("Couldn’t complete the response."); expect(screen.queryByText(/secret-provider-token/)).toBeNull();
+});
+
+describe("Native attachments", () => {
+  const file = { id: "attachment-1", name: "brief.txt", bytes: 24 };
+  it("keeps the draft when the picker is cancelled and makes no model call", async () => {
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep this draft"); await user.click(screen.getByRole("button", { name: "Add files" }));
+    expect(nativeMock.chooseAttachments).toHaveBeenCalledTimes(1); expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Keep this draft"); expect(nativeMock.createMessage).not.toHaveBeenCalled(); expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
+  });
+  it("preserves selected files after a database failure and consumes them only after message save", async () => {
+    nativeMock.chooseAttachments.mockResolvedValue([file]); nativeMock.createMessage.mockRejectedValueOnce(new Error("database failure"));
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.click(screen.getByRole("button", { name: "Add files" })); await screen.findByRole("button", { name: "Remove brief.txt" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Use this brief"); await user.click(screen.getByRole("button", { name: "Send message" })); await screen.findByText("Couldn’t save your message. Your draft is still here.");
+    expect(screen.getByRole("button", { name: "Remove brief.txt" })).toBeTruthy(); expect(nativeMock.removeStagedAttachment).not.toHaveBeenCalled();
+    nativeMock.messages.mockResolvedValue([{ ...userMessage, attachments: [file] }]); await user.click(screen.getByRole("button", { name: "Send message" })); await screen.findByText("Create this website?");
+    expect(nativeMock.createMessage).toHaveBeenLastCalledWith(null, "Use this brief", "auto", [file.id]); expect(screen.queryByRole("button", { name: "Remove brief.txt" })).toBeNull(); expect(screen.getByLabelText("Message attachments").textContent).toContain("brief.txt"); expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
+  });
+  it("removes staging explicitly and clears unused selected files for a new chat", async () => {
+    nativeMock.chooseAttachments.mockResolvedValue([file]); const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.click(screen.getByRole("button", { name: "Add files" })); await user.click(await screen.findByRole("button", { name: "Remove brief.txt" })); expect(nativeMock.removeStagedAttachment).toHaveBeenCalledWith(file.id);
+    await user.click(screen.getByRole("button", { name: "Add files" })); await screen.findByRole("button", { name: "Remove brief.txt" }); await user.click(screen.getByRole("button", { name: "New chat" }));
+    expect(screen.queryByRole("button", { name: "Remove brief.txt" })).toBeNull(); expect(nativeMock.removeStagedAttachment).toHaveBeenCalledTimes(2);
+  });
+  it("discards late native-picker files after switching to a new chat", async () => {
+    let finish: (files: typeof file[]) => void = () => {}; nativeMock.chooseAttachments.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" }); await user.click(screen.getByRole("button", { name: "Add files" })); await user.click(screen.getByRole("button", { name: "New chat" }));
+    await act(async () => finish([file])); expect(screen.queryByRole("button", { name: "Remove brief.txt" })).toBeNull(); expect(nativeMock.removeStagedAttachment).toHaveBeenCalledWith(file.id);
+  });
+  it("does not delete attachment bytes while their message save is in flight or overwrite a new draft", async () => {
+    nativeMock.chooseAttachments.mockResolvedValue([file]); let finish: (value: typeof conversation) => void = () => {};
+    nativeMock.createMessage.mockReturnValue(new Promise((resolve) => { finish = resolve; })); const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.click(screen.getByRole("button", { name: "Add files" })); await screen.findByRole("button", { name: "Remove brief.txt" }); await user.type(screen.getByRole("textbox", { name: "Message" }), "Old request"); await user.click(screen.getByRole("button", { name: "Send message" }));
+    await user.click(screen.getByRole("button", { name: "New chat" })); await user.type(screen.getByRole("textbox", { name: "Message" }), "New draft"); expect(nativeMock.removeStagedAttachment).not.toHaveBeenCalled();
+    await act(async () => finish(conversation)); expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("New draft"); expect(nativeMock.removeStagedAttachment).not.toHaveBeenCalled(); expect(screen.queryByRole("button", { name: "Remove brief.txt" })).toBeNull();
+  });
+});
+it("cleans abandoned attachment staging after a delayed message save fails", async () => {
+  const file = { id: "abandoned-file", name: "brief.pdf", bytes: 24 }; nativeMock.chooseAttachments.mockResolvedValue([file]);
+  let fail: (error: Error) => void = () => {}; nativeMock.createMessage.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+  const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+  await user.click(screen.getByRole("button", { name: "Add files" })); await screen.findByRole("button", { name: "Remove brief.pdf" }); await user.type(screen.getByRole("textbox", { name: "Message" }), "Old brief"); await user.click(screen.getByRole("button", { name: "Send message" }));
+  await user.click(screen.getByRole("button", { name: "New chat" })); await user.type(screen.getByRole("textbox", { name: "Message" }), "Fresh draft"); expect(nativeMock.removeStagedAttachment).not.toHaveBeenCalled();
+  await act(async () => fail(new Error("database rejected"))); expect(nativeMock.removeStagedAttachment).toHaveBeenCalledWith(file.id); expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Fresh draft");
 });

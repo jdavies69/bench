@@ -8,7 +8,8 @@ export type WebSearchBackend = "auto" | "brave" | "searxng" | "off";
 
 export interface Project { id: string; name: string; isSystem: boolean; }
 export interface Conversation { id: string; projectId: string; title: string; outputType: OutputType; outputSelection: OutputType; updatedAt: string; }
-export interface Message { id: string; conversationId: string; role: "user" | "assistant"; content: string; createdAt: string; }
+export interface AttachmentMetadata { id: string; name: string; bytes: number; }
+export interface Message { id: string; conversationId: string; role: "user" | "assistant"; content: string; createdAt: string; attachments?: AttachmentMetadata[]; }
 export interface Settings { executionBehavior: ExecutionBehavior; approvalBehavior: ApprovalBehavior; modelProvider: ProviderId; sidebarCollapsed: boolean; webSearchBackend: WebSearchBackend; webSearchUrl: string; }
 export interface ProviderStatus { id: ProviderId; label: string; model: string; keySource: "keychain" | "environment" | "none"; }
 export interface Snapshot { outputs: OutputDefinition[]; projects: Project[]; conversations: Conversation[]; settings: Settings; providers: ProviderStatus[]; webSearchKeySource: "keychain" | "environment" | "none"; webSearchStatus: "openrouter" | "unavailable" | "off"; }
@@ -41,8 +42,10 @@ export const native = {
   snapshot: () => invoke<Snapshot>("load_snapshot"),
   messages: (conversationId: string) => invoke<Message[]>("load_messages", { conversationId }),
   toolActivity: (conversationId: string) => invoke<ToolActivity[]>("load_tool_activity", { conversationId }),
-  createMessage: (conversationId: string | null, content: string, outputType: OutputType) =>
-    invoke<Conversation>("create_user_message", { conversationId, content, outputType }),
+  chooseAttachments: () => invoke<AttachmentMetadata[]>("choose_attachments"),
+  removeStagedAttachment: (attachmentId: string) => invoke<void>("remove_staged_attachment", { attachmentId }),
+  createMessage: (conversationId: string | null, content: string, outputType: OutputType, attachmentIds: string[] = []) =>
+    invoke<Conversation>("create_user_message", { conversationId, content, outputType, attachmentIds }),
   stream: (conversationId: string, onEvent: (event: StreamEvent) => void) => {
     const channel = new Channel<StreamEvent>();
     channel.onmessage = onEvent;

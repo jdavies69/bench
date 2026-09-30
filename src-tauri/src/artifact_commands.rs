@@ -318,7 +318,14 @@ pub async fn generate_artifact(
     {
         return Err("This output is already up to date. Send a new request to revise it.".into());
     }
-    let provider = HttpProvider::for_website(provider, key_store::active_key(provider)?, model);
+    let provider = HttpProvider::for_website(provider, key_store::active_key(provider)?, model)
+        .with_images(crate::attachments::conversation_images(
+            &*state
+                .db
+                .lock()
+                .map_err(|_| "Local database is unavailable.")?,
+            &conversation_id,
+        )?)?;
     let result = text_outputs::generate(&provider, selected, previous.as_ref(), &requests).await?;
     artifact::save(&root, &conversation_id, &result, text_outputs::validate)
 }

@@ -23,7 +23,7 @@ fn context(conn: &Connection, id: &str) -> Result<(ArtifactKind, Vec<String>, St
     if db::settings(conn)?.model_provider != "openrouter" {
         return Err("Select OpenRouter in Settings to create Image and Voice outputs.".into());
     }
-    let requests = db::messages(conn, id)?
+    let requests = db::model_messages(conn, id)?
         .into_iter()
         .filter(|message| message.role == "user")
         .map(|message| message.content)
@@ -75,8 +75,16 @@ pub async fn generate_media_output(
         }
     }
     let key = key_store::active_key(ProviderId::OpenRouter)?;
-    let media_provider = OpenRouterMedia::new(key.clone())?;
-    let text_provider = HttpProvider::new(ProviderId::OpenRouter, key, model);
+    let images = crate::attachments::conversation_images(
+        &*state
+            .db
+            .lock()
+            .map_err(|_| "Local database is unavailable.")?,
+        &conversation_id,
+    )?;
+    let media_provider = OpenRouterMedia::new(key.clone())?.with_images(images.clone());
+    let text_provider =
+        HttpProvider::new(ProviderId::OpenRouter, key, model).with_images(images)?;
     let next = media::generate(
         &media_provider,
         &text_provider,

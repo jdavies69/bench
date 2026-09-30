@@ -362,9 +362,11 @@ pub fn load_tool_activity(
 #[tauri::command]
 pub fn create_user_message(
     state: State<'_, AppState>,
+    attachments: State<'_, crate::attachments::AttachmentState>,
     conversation_id: Option<String>,
     content: String,
     output_type: String,
+    attachment_ids: Option<Vec<String>>,
 ) -> Result<db::Conversation, String> {
     let active = state
         .active_operations
@@ -377,12 +379,15 @@ pub fn create_user_message(
     {
         return Err("Wait for this response to finish. Your draft is still here.".into());
     }
-    db::create_user_message(
-        &mut *database(&state)?,
-        conversation_id.as_deref(),
-        &content,
-        &output_type,
-    )
+    crate::attachments::with_staged(&attachments, &attachment_ids.unwrap_or_default(), |files| {
+        db::create_user_message_with_attachments(
+            &mut *database(&state)?,
+            conversation_id.as_deref(),
+            &content,
+            &output_type,
+            files,
+        )
+    })
 }
 
 #[tauri::command]
@@ -443,7 +448,7 @@ pub async fn stream_response(
         let policy =
             Policy::from_settings(&settings.execution_behavior, &settings.approval_behavior)?;
         let model = db::model(&conn, provider)?;
-        let messages = db::messages(&conn, &conversation_id)?;
+        let messages = db::model_messages(&conn, &conversation_id)?;
         let request_id = messages
             .last()
             .filter(|message| message.role == "user")
@@ -461,11 +466,11 @@ pub async fn stream_response(
     if history.last().is_none_or(|message| message.role != "user") {
         return Err("There is no unanswered message to retry.".into());
     }
-    let current_request = history
-        .iter()
-        .rev()
-        .find(|message| message.role == "user")
-        .map(|message| message.content.clone())
+    // Attached reference data must not decide whether the user's request needs search.
+    let current_request = db::messages(&*database(&state)?, &conversation_id)?
+        .into_iter()
+        .find(|message| message.id == request_id && message.role == "user")
+        .map(|message| message.content)
         .ok_or("There is no unanswered message to retry.")?;
     let needs_search = requires_current_info(&current_request);
     let search_enabled = {
@@ -520,7 +525,9 @@ pub async fn stream_response(
         });
     }
     let key = key_store::active_key(provider)?;
-    let provider = HttpProvider::new(provider, key, model);
+    let provider = HttpProvider::new(provider, key, model).with_images(
+        crate::attachments::conversation_images(&*database(&state)?, &conversation_id)?,
+    )?;
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
     let task = tokio::spawn(async move {
         if search_enabled {
@@ -889,7 +896,9 @@ pub async fn generate_website(
         return Err("This website is already up to date. Send a new request to revise it.".into());
     }
     let key = key_store::active_key(provider)?;
-    let provider = HttpProvider::for_website(provider, key, model);
+    let provider = HttpProvider::for_website(provider, key, model).with_images(
+        crate::attachments::conversation_images(&*database(&state)?, &conversation_id)?,
+    )?;
     let next = website::generate(&provider, previous.as_ref(), &requests).await?;
     website::save(&root, &conversation_id, &next)
 }

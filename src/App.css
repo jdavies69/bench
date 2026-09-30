@@ -327,3 +327,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .agent-steps li > span { color: var(--ink); }
 .agent-steps li > p { margin: 4px 0; line-height: 1.5; }
 .agent-reader .doc-paper { flex: initial; overflow-y: visible; }
+.composer:has(.composer-attachments) { position: relative; }
+.composer-attachments { position: absolute; top: calc(100% + 10px); left: 20px; right: 20px; display: flex; gap: 7px; flex-wrap: wrap; max-height: 84px; overflow-y: auto; }
+.attachment-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 200px; padding: 6px 9px; border-radius: 7px; background: #eeedeb; color: #606367; font-size: 10px; }
+.attachment-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip button { display: flex; align-items: center; border: 0; background: transparent; padding: 0; color: inherit; }
+.message-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.conversation-composer:has(.composer-attachments) { padding-bottom: 104px; }

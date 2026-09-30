@@ -50,3 +50,11 @@ CI builds the frontend and runs frontend and beta-checker tests, Rust formatting
 ## App updates
 
 Signed updater support verifies the package and its announced version before installation. Settings supports automatic download and an explicit restart to install. The release feed is not configured yet; automatic delivery and an actual in-place upgrade remain pending. The updater signing key is separate from Apple Developer ID signing.
+
+## File attachments
+
+Click **+**, choose files in the Mac file picker, review the filename chips, write a request, and send. Remove a chip to exclude that file. Choosing a file does not contact a model. Sending includes selected text/images with the request; attachments persist locally with the saved message, including failed responses and retries.
+
+Supported: PNG/JPEG/WebP (5 MiB each), TXT/MD/CSV/JSON, DOCX, XLSX, and supported text PDFs (10 MiB document source). Up to five files, 20 MiB total; extracted text is limited to 256 KiB per file and 1 MiB per message. Image inputs require an OpenRouter model that supports images; incompatible models fail explicitly. Image output uses uploads as actual image-generation references. Spreadsheets supply saved cell values, not executed formulas or macros. Legacy XLS needs XLSX/CSV conversion.
+
+PDF extraction is conservative: classic cross-reference tables and bounded Flate streams are supported. Encrypted PDFs, compressed object/cross-reference streams, unsupported filters, scans requiring OCR, and malformed or excessively expanded content are rejected with an explanation. DOCX/XLSX archives and extracted content are bounded; generated or embedded code is never executed.

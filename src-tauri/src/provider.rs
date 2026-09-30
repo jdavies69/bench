@@ -135,6 +135,7 @@ pub struct HttpProvider {
     endpoint: String,
     api_key: String,
     model: String,
+    images: Vec<crate::attachments::ImageInput>,
 }
 
 impl HttpProvider {
@@ -157,7 +158,19 @@ impl HttpProvider {
             endpoint: kind.endpoint().into(),
             api_key,
             model,
+            images: Vec::new(),
         }
+    }
+
+    pub fn with_images(
+        mut self,
+        images: Vec<crate::attachments::ImageInput>,
+    ) -> Result<Self, String> {
+        if !images.is_empty() && self.kind != ProviderId::OpenRouter {
+            return Err("Select OpenRouter to send image attachments.".into());
+        }
+        self.images = images;
+        Ok(self)
     }
 
     /// The server tool belongs to the OpenRouter adapter. Other model
@@ -210,6 +223,9 @@ impl HttpProvider {
                 "stream": true
             })
         };
+        if !self.images.is_empty() {
+            add_image_parts(&mut body, &self.images)?;
+        }
         if web_search {
             body["tools"] = serde_json::json!([{
                 "type": "openrouter:web_search",
@@ -345,6 +361,32 @@ fn connection_error(kind: ProviderId, error: reqwest::Error) -> String {
             kind.label()
         )
     }
+}
+
+fn add_image_parts(
+    body: &mut Value,
+    images: &[crate::attachments::ImageInput],
+) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let message = body["messages"]
+        .as_array_mut()
+        .and_then(|messages| {
+            messages
+                .iter_mut()
+                .rev()
+                .find(|message| message["role"] == "user")
+        })
+        .ok_or("Save a request before sending images.")?;
+    let text = message["content"]
+        .as_str()
+        .ok_or("Image request context is invalid.")?
+        .to_owned();
+    let mut parts = vec![serde_json::json!({"type":"text","text":text})];
+    for image in images {
+        parts.push(serde_json::json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}",image.mime_type,STANDARD.encode(&image.data))}}));
+    }
+    message["content"] = Value::Array(parts);
+    Ok(())
 }
 
 fn response_error(kind: ProviderId, status: reqwest::StatusCode) -> String {
@@ -573,6 +615,26 @@ fn send_delta(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn image_attachments_are_real_content_parts_and_never_system_instructions() {
+        let images = vec![crate::attachments::ImageInput {
+            mime_type: "image/png".into(),
+            data: vec![1, 2, 3],
+        }];
+        let mut body = serde_json::json!({"messages":[{"role":"system","content":"Policy"},{"role":"user","content":"Read my image"}]});
+        add_image_parts(&mut body, &images).unwrap();
+        assert_eq!(body["messages"][0]["content"], "Policy");
+        assert_eq!(body["messages"][1]["content"][0]["text"], "Read my image");
+        assert_eq!(
+            body["messages"][1]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
+        assert!(
+            HttpProvider::new(ProviderId::Anthropic, "test".into(), "model".into())
+                .with_images(images)
+                .is_err()
+        );
+    }
     use std::{
         io::{Read, Write},
         net::TcpListener,

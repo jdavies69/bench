@@ -201,11 +201,15 @@ pub fn install_app_update(
     app: AppHandle,
     state: State<'_, UpdateState>,
     product: State<'_, crate::commands::AppState>,
+    attachments: State<'_, crate::attachments::AttachmentState>,
 ) -> Result<(), String> {
     if state.busy.swap(true, Ordering::AcqRel) {
         return Err("An update is already in progress.".into());
     }
     let _busy = Busy(&state.busy);
+    if attachments.has_staged()? {
+        return Err("Send or remove your selected attachments before restarting.".into());
+    }
     let connection = lock(&product.oauth_connection)?;
     if connection.is_some() {
         return Err("Finish or cancel OpenRouter sign-in before restarting.".into());

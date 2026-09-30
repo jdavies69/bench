@@ -120,6 +120,7 @@ pub struct OpenRouterMedia {
     client: Client,
     api_key: String,
     origin: String,
+    uploads: Vec<crate::attachments::ImageInput>,
 }
 
 #[async_trait]
@@ -249,7 +250,13 @@ impl OpenRouterMedia {
             client,
             api_key,
             origin: "https://openrouter.ai/api/v1".into(),
+            uploads: Vec::new(),
         })
+    }
+
+    pub fn with_images(mut self, images: Vec<crate::attachments::ImageInput>) -> Self {
+        self.uploads = images;
+        self
     }
 
     #[cfg(test)]
@@ -266,12 +273,16 @@ impl OpenRouterMedia {
     ) -> Result<MediaAsset, String> {
         validate_input(model, prompt)?;
         let mut body = serde_json::json!({"model":model,"prompt":prompt,"n":1});
+        let mut references = self.uploads.iter().map(|image| serde_json::json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}",image.mime_type,STANDARD.encode(&image.data))}})).collect::<Vec<_>>();
         if let Some(reference) = reference {
             validate(
                 ArtifactKind::Image,
                 &serde_json::to_value(reference).map_err(|_| "Image reference is unavailable.")?,
             )?;
-            body["input_references"] = serde_json::json!([{"type":"image_url","image_url":{"url":format!("data:{};base64,{}", reference.mime_type, reference.data_base64)}}]);
+            references.push(serde_json::json!({"type":"image_url","image_url":{"url":format!("data:{};base64,{}", reference.mime_type, reference.data_base64)}}));
+        }
+        if !references.is_empty() {
+            body["input_references"] = serde_json::Value::Array(references);
         }
         let response = self
             .client
@@ -439,7 +450,7 @@ fn parse_image(
     })
 }
 
-fn image_header_valid(bytes: &[u8], mime: &str) -> bool {
+pub(crate) fn image_header_valid(bytes: &[u8], mime: &str) -> bool {
     let framing = match mime {
         "image/png" => {
             bytes.len() >= 45

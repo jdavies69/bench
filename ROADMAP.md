@@ -6,11 +6,15 @@
 - Design optional monthly AI-budget-aware model routing and opt-in real stronger-model comparisons; no paid examples without approval and no Bench account/billing service.
 
 - Prepare the Apple Silicon BYOK release with Connect OpenRouter browser sign-in. Accounts/billing remain deferred. Complete OAuth native verification and signing/notarization/clean-install gates; see `docs/public-release.md`.
-- Activate the existing output types with real workflows, as requested September 30. Document/Presentation and media work is in progress; evaluate OpenRouter Agent SDK reuse for Agent/Application before adding a custom runtime.
+- Activate the existing output types with real workflows, as requested September 30. All existing types now have bounded workflows; continue authorized live verification and improve concrete failures.
 - Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
 - Review the Website output for usability and factual accuracy across more specifically authorized live revisions. The existing saved version and section navigation have been reviewed without paid calls.
 
 ## Current handoff
+
+- File attachments are installed and native-verified September 30: composer + opens the Mac chooser, selected filename chips are visibly positioned below the composer, and removal works. User confirmed successful upload. `/Applications/Bench.app` recursively matches the final rebuilt package. Selecting stays local; no paid provider request was made in this attachment cycle.
+- Supported uploads: PNG/JPEG/WebP, UTF-8 TXT/MD/CSV/JSON, DOCX, XLSX, and bounded classic-table/Flate text PDFs. Up to five files/20 MiB; images 5 MiB each, document source 10 MiB, extracted text 256 KiB per file/1 MiB per message. XLS, encrypted/unsupported PDFs and scans needing OCR have explicit limitations; see README. Rust staging survives failed DB writes, message+attachments commit atomically, and persisted text/images enter every output’s provider context. Image output uses image uploads as actual references. File contents do not change native search intent or action grants. Updates refuse restart with staged files.
+- Attachment validation: 129 Rust tests, 87 frontend tests, 16 release-tool tests, formatting, Clippy, frontend build and signed native package passed. Native verification caught off-screen attachment chips; relative composer positioning was fixed, rebuilt and visibly rechecked. Paid attachment inference remains unverified.
 
 - Installed Agent/media diagnostics milestone: `/Applications/Bench.app` recursively matches the freshly built signed updater package. 117 Rust tests, 81 frontend tests, 16 release-tool tests, formatting, Clippy and production build pass. Agent is a bounded local conversation-writing workflow, not browsing/host automation; paid Agent generation remains unverified.
 - User specifically authorized ONE retry of saved Image request “A beach day in nyc.” Native UI retry returned HTTP 402; mapped message confirms OpenRouter could not fund the request and directs the user to credits/key limit. No image was saved, no second retry was made, and the saved request remains ready to continue. Previous generic message hid this cause; safe specific media errors now remain visible without exposing upstream bodies.

@@ -8,7 +8,7 @@ import { OpenRouterSetup } from "./components/OpenRouterSetup";
 import { AppUpdates } from "./components/AppUpdates";
 import { OpenRouterUsage } from "./components/OpenRouterUsage";
 import { workspaceModules } from "./outputs/registry";
-import { native, type ArtifactState, type ArtifactExportFormat, type TextArtifactContent, type WorkspaceState, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebsiteState } from "./native";
+import { native, type AttachmentMetadata, type ArtifactState, type ArtifactExportFormat, type TextArtifactContent, type WorkspaceState, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebsiteState } from "./native";
 import "./App.css";
 
 type IconName = "mark" | "plus" | "search" | "folder" | "chevron" | "arrow" | "panel" | "close";
@@ -34,17 +34,19 @@ function Icon({ name, size = 19 }: { name: IconName; size?: number }) {
   };
   return <svg {...common}>{paths[name]}</svg>;
 }
-function Composer({ value, onChange, onSend, busy, outputType, setOutputType, centered, definitions }: {
+function Composer({ value, onChange, onSend, busy, outputType, setOutputType, centered, definitions, attachments, onAttach, onRemoveAttachment, attachmentBusy }: {
   value: string; onChange: (value: string) => void; onSend: () => void; busy: boolean;
+  attachments: AttachmentMetadata[]; onAttach: () => void; onRemoveAttachment: (id: string) => void; attachmentBusy: boolean;
   outputType: OutputType; setOutputType: (value: OutputType) => void; centered: boolean; definitions: OutputDefinition[];
 }) {
   const textarea = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { if (textarea.current) { textarea.current.style.height = "auto"; textarea.current.style.height = `${Math.min(textarea.current.scrollHeight, 160)}px`; } }, [value]);
   return <form className={`composer ${centered ? "composer-centered" : ""}`} onSubmit={(event) => { event.preventDefault(); onSend(); }}>
-    <button type="button" className="composer-add" title="Attachments are coming later" aria-label="Add attachment (coming later)" disabled><Icon name="plus" size={22} /></button>
+    <button type="button" className="composer-add" title="Add up to 5 supported files" aria-label="Add files" disabled={busy || attachmentBusy} onClick={onAttach}><Icon name="plus" size={22} /></button>
     <textarea ref={textarea} rows={1} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); onSend(); } }} placeholder="Describe what you want to make..." aria-label="Message" />
     <OutputPicker value={outputType} onChange={setOutputType} definitions={definitions} />
-    <button className="send-button" type="submit" disabled={!value.trim() || busy} aria-label="Send message"><Icon name="arrow" size={21} /></button>
+    <button className="send-button" type="submit" disabled={!value.trim() || busy || attachmentBusy} aria-label="Send message"><Icon name="arrow" size={21} /></button>
+    {attachments.length > 0 && <div className="composer-attachments" aria-label="Attached files">{attachments.map((file) => <span className="attachment-chip" key={file.id}><span title={file.name}>{file.name}</span><button type="button" aria-label={`Remove ${file.name}`} disabled={busy || attachmentBusy} onClick={() => onRemoveAttachment(file.id)}><Icon name="close" size={12} /></button></span>)}</div>}
   </form>;
 }
 const safeMediaErrors = new Set([
@@ -161,6 +163,12 @@ function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [toolActivity, setToolActivity] = useState<ToolActivity[]>([]);
+  const [attachments, setAttachments] = useState<AttachmentMetadata[]>([]);
+  const stagedAttachments = useRef<AttachmentMetadata[]>([]);
+  const attachmentEpoch = useRef(0);
+  const attachmentWorking = useRef(false);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const savingAttachments = useRef(new Set<string>());
   const [draft, setDraft] = useState("");
   const [response, setResponse] = useState("");
   const [toolStatus, setToolStatus] = useState("");
@@ -211,7 +219,35 @@ function App() {
   useEffect(() => { native.snapshot().then((next) => { setSnapshot(next); setCollapsed(next.settings.sidebarCollapsed); if (next.conversations.length === 0 && next.providers.length > 0 && next.providers.every((provider) => provider.keySource === "none")) setView("setup"); }).catch((e) => setError(errorText(e))); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, response, pendingReview]);
   useEffect(() => { if (view !== "search" || !searchQuery.trim()) { setSearchResults([]); return; } let live = true; const timer = window.setTimeout(() => { native.search(searchQuery).then((results) => { if (live) setSearchResults(results); }).catch((e) => setError(errorText(e))); }, 180); return () => { live = false; window.clearTimeout(timer); }; }, [searchQuery, view]);
+  const updateAttachments = (files: AttachmentMetadata[]) => { stagedAttachments.current = files; setAttachments(files); };
+  const discardStaging = () => {
+    attachmentEpoch.current++; const files = stagedAttachments.current; updateAttachments([]);
+    for (const file of files) if (!savingAttachments.current.has(file.id)) void native.removeStagedAttachment(file.id).catch(() => {});
+  };
+  const chooseAttachments = async () => {
+    if (busy || attachmentWorking.current) return;
+    attachmentWorking.current = true; setAttachmentBusy(true); const epoch = attachmentEpoch.current; setError("");
+    try {
+      const files = await native.chooseAttachments();
+      if (attachmentEpoch.current !== epoch) { await Promise.all(files.map((file) => native.removeStagedAttachment(file.id).catch(() => {}))); return; }
+      const combined = [...stagedAttachments.current, ...files];
+      if (combined.length > 5 || combined.reduce((total, file) => total + file.bytes, 0) > 20 * 1024 * 1024) {
+        await Promise.all(files.map((file) => native.removeStagedAttachment(file.id).catch(() => {})));
+        setError("Attach up to 5 files, with a combined size of 20 MB."); return;
+      }
+      updateAttachments(combined);
+    } catch { if (attachmentEpoch.current === epoch) setError("Couldn’t attach these files. Check the file type and size, then try again."); }
+    finally { attachmentWorking.current = false; setAttachmentBusy(false); }
+  };
+  const removeAttachment = async (id: string) => {
+    if (busy || attachmentWorking.current) return;
+    attachmentWorking.current = true; setAttachmentBusy(true); const epoch = attachmentEpoch.current;
+    try { await native.removeStagedAttachment(id); if (epoch === attachmentEpoch.current) updateAttachments(stagedAttachments.current.filter((file) => file.id !== id)); }
+    catch { if (epoch === attachmentEpoch.current) setError("Couldn’t remove this attachment. Try again."); }
+    finally { attachmentWorking.current = false; setAttachmentBusy(false); }
+  };
   const selectConversation = async (id: string) => {
+    discardStaging();
     selectedRef.current = id; setSelectedId(id); setPendingReview(null); setResponse(""); setToolStatus(""); setFailedId(null); setError(""); setMessages([]); setToolActivity([]); setWebsite(null); setArtifact(null); setRevisions([]); setView("workspace"); setOutputOpen(true);
     try {
       const conversation = snapshot?.conversations.find((item) => item.id === id);
@@ -229,7 +265,7 @@ function App() {
       }
     } catch (e) { if (selectedRef.current === id) setError(errorText(e)); }
   };
-  const startNew = () => { selectedRef.current = null; setPendingReview(null); setRevisions([]); setSelectedId(null); setMessages([]); setToolActivity([]); setResponse(""); setToolStatus(""); setDraft(""); setOutputType("auto"); setWebsite(null); setArtifact(null); setView("workspace"); setError(""); setFailedId(null); };
+  const startNew = () => { discardStaging(); selectedRef.current = null; setPendingReview(null); setRevisions([]); setSelectedId(null); setMessages([]); setToolActivity([]); setResponse(""); setToolStatus(""); setDraft(""); setOutputType("auto"); setWebsite(null); setArtifact(null); setView("workspace"); setError(""); setFailedId(null); };
   const executeWebsite = async (conversationId: string, operation: "generate" | "restore", targetRevision?: number, token?: string) => {
     const site = operation === "restore" && targetRevision !== undefined
       ? await native.restoreWebsite(conversationId, targetRevision, token)
@@ -308,16 +344,21 @@ function App() {
     return true;
   };
   const send = async () => {
-    if (!draft.trim() || busy) return;
+    if (!draft.trim() || busy || attachmentWorking.current) return;
     if (!snapshot) { ensureConnection(); return; }
     const origin = selectedRef.current;
+    const composerEpoch = attachmentEpoch.current;
+    const files = [...stagedAttachments.current];
+    savingAttachments.current = new Set(files.map((file) => file.id));
     const request = draft.trim();
     setBusy(true); setBusyId(origin); setPendingReview(null); setError(""); setResponse(""); setToolStatus(""); setFailedId(null);
     let created: Conversation | null = null;
     try {
-      created = await native.createMessage(origin, request, outputType);
+      created = files.length ? await native.createMessage(origin, request, outputType, files.map((file) => file.id)) : await native.createMessage(origin, request, outputType);
+      savingAttachments.current.clear();
+      if (attachmentEpoch.current === composerEpoch) updateAttachments([]);
       setBusyId(created.id);
-      if (selectedRef.current === origin) {
+      if (selectedRef.current === origin && attachmentEpoch.current === composerEpoch) {
         setDraft(""); selectedRef.current = created.id; setSelectedId(created.id); setOutputOpen(true);
         setExpanded((old) => ({ ...old, [created!.projectId]: true }));
         const loaded = await native.messages(created.id);
@@ -334,8 +375,12 @@ function App() {
       await refresh();
     } catch (e) {
       if (created) { if (selectedRef.current === created.id) { setFailedId(created.id); setFailedReason(responseError(e)); setResponse(""); } }
-      else if (selectedRef.current === origin) setError("Couldn’t save your message. Your draft is still here.");
-    } finally { setBusy(false); setBusyId(null); }
+      else if (selectedRef.current === origin && attachmentEpoch.current === composerEpoch) setError("Couldn’t save your message. Your draft is still here.");
+    } finally {
+      savingAttachments.current.clear();
+      if (!created && attachmentEpoch.current !== composerEpoch) await Promise.all(files.map((file) => native.removeStagedAttachment(file.id).catch(() => {})));
+      setBusy(false); setBusyId(null);
+    }
   };
   const retry = async () => {
     if (!failedId || busy || !snapshot) return;
@@ -355,23 +400,23 @@ function App() {
   return <div className="app-shell" onPointerMove={moveGrid} onPointerLeave={leaveGrid}><div className="drag-strip" data-tauri-drag-region aria-hidden="true" />
     <Sidebar snapshot={snapshot} collapsed={collapsed} onToggle={toggleSidebar} expanded={expanded} setExpanded={setExpanded} current={current} selectedId={selectedId} onNew={startNew} onSearch={() => { setView("search"); setSearchQuery(""); }} onSelect={(id) => void selectConversation(id)} onSettings={() => setView("settings")} onCreateProject={addProject} />
     <main className={`main-area ${collapsed ? "with-rail" : "with-sidebar"}`}>
-      {view === "workspace" && !selectedId && <div className="empty-workspace"><Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered definitions={snapshot?.outputs ?? []} /></div>}
+      {view === "workspace" && !selectedId && <div className="empty-workspace"><Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered definitions={snapshot?.outputs ?? []} attachments={attachments} onAttach={() => void chooseAttachments()} onRemoveAttachment={(id) => void removeAttachment(id)} attachmentBusy={attachmentBusy} /></div>}
       {view === "workspace" && selectedId && <div className={`adaptive-workspace ${hasOutput && outputOpen ? "has-output" : ""}`}>
         <div className="conversation-view"><div className="message-scroll"><div className={`message-stack ${projectChanging ? "project-changing" : ""}`}>
           <header className="conversation-header"><span className="conversation-title">{current?.title}</span><label className="project-picker"><span className="sr-only">Project</span><select value={current?.projectId ?? "miscellaneous"} onChange={(event) => void moveCurrent(event.target.value)} aria-label="Move conversation to project">{snapshot?.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><Icon name="chevron" size={13} /></label>{hasOutput && !outputOpen && <button className="show-output" onClick={() => setOutputOpen(true)}>Show {outputName(current.outputType)}</button>}</header>
-          {messages.map((message) => <div key={message.id} className={`message message-${message.role}`}><div className="message-content">{message.role === "assistant" ? <Markdown text={message.content} /> : message.content}</div>{message.role === "user" && toolActivity.filter((activity) => activity.userMessageId === message.id).map((activity) => <div className="tool-activity" key={activity.id}>{activity.status === "completed" ? activity.summary : "Web search unavailable"}</div>)}</div>)}
+          {messages.map((message) => <div key={message.id} className={`message message-${message.role}`}><div className="message-content">{message.role === "assistant" ? <Markdown text={message.content} /> : message.content}</div>{message.attachments && message.attachments.length > 0 && <div className="message-attachments" aria-label="Message attachments">{message.attachments.map((file) => <span className="attachment-chip" key={file.id}>{file.name}</span>)}</div>}{message.role === "user" && toolActivity.filter((activity) => activity.userMessageId === message.id).map((activity) => <div className="tool-activity" key={activity.id}>{activity.status === "completed" ? activity.summary : "Web search unavailable"}</div>)}</div>)}
           {toolActivity.filter((activity) => activity.userMessageId === null).map((activity) => <div className="tool-activity" key={activity.id}>{activity.status === "completed" ? activity.summary : "Web search unavailable"}</div>)}
           {toolStatus && <div className="tool-status">{toolStatus}</div>}
           {response && <div className="message message-assistant"><div className="message-content"><Markdown text={response} /></div></div>}
           {activeBusy && !response && <div className="thinking" aria-label="Waiting for response"><span /><span /><span /></div>}
           {pendingReview?.review.conversationId === selectedId && <div className="action-review"><div><span>{pendingReview.review.title}</span><p>{pendingReview.review.detail}</p></div><div className="action-review-controls"><button type="button" disabled={busy} onClick={() => void approvePendingAction()}>{pendingReview.operation === "restore" ? "Restore" : pendingReview.operation === "edit" ? "Save edits" : "Continue"}</button><button type="button" disabled={busy} onClick={() => { setPendingReview(null); if (pendingReview.operation === "generate") { setFailedId(selectedId); setFailedReason("Request saved. Continue when ready."); } }}>Not now</button></div></div>}
           {failedId === selectedId && <div className="inline-failure"><span>{failedReason}</span><button onClick={() => void retry()}>Retry</button></div>}<div ref={endRef} />
-        </div></div><div className="conversation-composer"><Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered={false} definitions={snapshot?.outputs ?? []} /></div></div>
+        </div></div><div className="conversation-composer"><Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered={false} definitions={snapshot?.outputs ?? []} attachments={attachments} onAttach={() => void chooseAttachments()} onRemoveAttachment={(id) => void removeAttachment(id)} attachmentBusy={attachmentBusy} /></div></div>
         {hasOutput && outputOpen && <OutputWorkspace conversationId={current.id} type={current.outputType} state={current.outputType === "website" && website ? { ...website, kind: "website" } : artifact} revisions={revisions} busy={activeBusy} onClose={() => setOutputOpen(false)} onRestore={(revision) => void restoreWebsite(revision)} onExport={(format) => void exportArtifact(format)} onEdit={(content) => void editArtifact(content)} />}
       </div>}
       {view === "search" && <section className="utility-panel search-panel"><div className="panel-top"><h1>Search</h1><button className="icon-button" onClick={() => setView("workspace")} aria-label="Close search"><Icon name="close" /></button></div><div className="search-input-wrap"><Icon name="search" size={19} /><input autoFocus placeholder="Search conversations" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} aria-label="Search conversations" /></div><div className="search-results">{searchResults.map((conversation) => <button key={conversation.id} className="search-result" onClick={() => void selectConversation(conversation.id)}><span>{conversation.title}</span><small>{snapshot?.projects.find((project) => project.id === conversation.projectId)?.name ?? "Miscellaneous"}</small></button>)}{searchQuery && searchResults.length === 0 && <p className="quiet-note">No conversations found.</p>}</div></section>}
       {view === "setup" && <OpenRouterSetup onCancelConnect={() => { connectionAttempt.current++; return native.cancelOpenRouterConnect(); }} onConnect={async () => { const attempt = ++connectionAttempt.current; await native.connectOpenRouter(); if (attempt !== connectionAttempt.current) return; const next = await refresh(); if (attempt !== connectionAttempt.current) return; if (!next.providers.some((provider) => provider.id === "openrouter" && provider.keySource !== "none")) throw new Error("Connection not saved"); setView(setupReturn); setError(""); }} onDismiss={() => { setView(setupReturn); setError(""); }} />}
-      {view === "settings" && snapshot && <SettingsView snapshot={snapshot} onClose={() => setView("workspace")} onSaveBehaviors={(execution, approval) => void saveSettings(execution, approval)} onRefresh={async () => { await refresh(); }} onError={setError} updateBlocked={busy || !!draft.trim()} onSetupOpenRouter={() => { setSetupReturn("settings"); setView("setup"); setError(""); }} />}
+      {view === "settings" && snapshot && <SettingsView snapshot={snapshot} onClose={() => setView("workspace")} onSaveBehaviors={(execution, approval) => void saveSettings(execution, approval)} onRefresh={async () => { await refresh(); }} onError={setError} updateBlocked={busy || attachmentBusy || attachments.length > 0 || !!draft.trim()} onSetupOpenRouter={() => { setSetupReturn("settings"); setView("setup"); setError(""); }} />}
       {error && <div className="error-toast" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss error"><Icon name="close" size={15} /></button></div>}
     </main>
   </div>;
