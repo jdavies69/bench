@@ -3,8 +3,14 @@
 ## Now
 
 - Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
-- Review active conversation, sidebar, Settings, and design-token consistency against the running app.
+- Visually review the **current installed build** in Computer Use: blank chat, active conversation, expanded/collapsed sidebar, and Settings. The previous visual check reached an older installed build and must not count as verification of the current UI.
 - Review the Website output for usability and factual accuracy across more live revisions.
+
+## Current handoff
+
+- `main` is at `adb2334` and was clean at the last check. GitHub CI passed for that commit. The same source was rebuilt on September 30 and installed at `/Applications/Bench.app`; its bundle matches `src-tauri/target/release/bundle/macos/Bench.app`. The previous installation is temporarily backed up at `/private/tmp/Bench-prior-20260930.app`.
+- Computer Use connected to the older app on September 30, then lost its native connection. Its helper logged repeated `Sender process is not authenticated` errors. Restarting the helper and connector did not restore visual access in that session. After reopening ChatGPT, retry Computer Use against `/Applications/Bench.app` before drawing UI conclusions. Bench itself launched as a process; the updated window was **not** visually verified.
+- A live OpenRouter web-search test has **not** been authorized or run. The earlier approval to run one live Website test does not cover search. Ask for specific authorization before a paid model/search request, then check citations and failure handling in the installed build.
 
 ## Next
 
@@ -31,4 +37,4 @@
 - OpenRouter-hosted web search uses the existing key, with capped tool calls, source checks for current answers, and preserved legacy credentials. Mock tests pass; live behavior awaits verification.
 - Realistic project and Auto output intent regressions cover explicit artifacts, informational questions, ambiguous projects, and weak new-folder signals.
 - Private GitHub repository and macOS CI workflow created.
-- 10 frontend and 54 Rust tests, frontend build, formatting, Clippy, packaged app build, and GitHub CI pass. External distribution remains unsigned/unnotarized.
+- 12 frontend and 57 Rust tests, frontend build, formatting, Clippy, packaged app build, and GitHub CI passed for `adb2334`. External distribution remains unsigned/unnotarized.
