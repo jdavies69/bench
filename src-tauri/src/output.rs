@@ -6,6 +6,7 @@ use serde::Serialize;
 pub enum Implementation {
     Chat,
     Website,
+    Artifact,
     Deferred,
 }
 
@@ -50,12 +51,12 @@ impl OutputType {
         let (label, implementation) = match self {
             Self::Chat => ("Chat", Implementation::Chat),
             Self::Website => ("Website", Implementation::Website),
-            Self::Application => ("Application", Implementation::Deferred),
-            Self::Presentation => ("Presentation", Implementation::Deferred),
-            Self::Document => ("Document", Implementation::Deferred),
-            Self::Image => ("Image", Implementation::Deferred),
+            Self::Application => ("Application", Implementation::Artifact),
+            Self::Presentation => ("Presentation", Implementation::Artifact),
+            Self::Document => ("Document", Implementation::Artifact),
+            Self::Image => ("Image", Implementation::Artifact),
             Self::Agent => ("Agent", Implementation::Deferred),
-            Self::Voice => ("Voice", Implementation::Deferred),
+            Self::Voice => ("Voice", Implementation::Artifact),
         };
         OutputDefinition {
             id: self.as_str(),

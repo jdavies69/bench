@@ -1,12 +1,20 @@
+mod application;
+mod application_commands;
+mod artifact;
+mod artifact_commands;
 mod commands;
 mod db;
 mod grouping;
 mod key_store;
+mod media;
+mod media_commands;
 mod oauth;
 mod output;
 mod policy;
 mod provider;
+mod text_outputs;
 mod tools;
+mod updates;
 mod usage;
 mod website;
 
@@ -16,18 +24,37 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let path = app.path().app_data_dir()?.join("bench.sqlite3");
             let conn = db::open(&path).map_err(std::io::Error::other)?;
+            app.manage(updates::UpdateState::default());
             app.manage(commands::AppState {
                 db: std::sync::Mutex::new(conn),
                 approvals: std::sync::Mutex::new(policy::ApprovalStore::default()),
                 oauth_connection: std::sync::Mutex::new(None),
                 active_operations: std::sync::Mutex::new(std::collections::HashSet::new()),
             });
+            updates::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            application_commands::load_application_values,
+            application_commands::save_application_values,
+            application_commands::evaluate_application,
+            updates::app_update_status,
+            updates::set_automatic_updates,
+            updates::check_app_update,
+            updates::install_app_update,
+            artifact_commands::load_artifact,
+            artifact_commands::generate_artifact,
+            artifact_commands::list_artifact_revisions,
+            artifact_commands::prepare_artifact_action,
+            artifact_commands::restore_artifact_revision,
+            artifact_commands::save_artifact_edits,
+            artifact_commands::export_artifact,
+            media_commands::generate_media_output,
             commands::load_snapshot,
             commands::connect_openrouter,
             commands::cancel_openrouter_connect,

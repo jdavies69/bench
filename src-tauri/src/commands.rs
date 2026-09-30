@@ -37,18 +37,22 @@ pub struct ActionReview {
     pub detail: String,
 }
 
-struct ConversationOperation<'a> {
+pub(crate) struct ConversationOperation<'a> {
     active: &'a Mutex<HashSet<String>>,
     id: String,
 }
 
 impl<'a> ConversationOperation<'a> {
-    fn begin(active: &'a Mutex<HashSet<String>>, id: &str) -> Result<Self, String> {
-        if !active
+    pub(crate) fn begin(active: &'a Mutex<HashSet<String>>, id: &str) -> Result<Self, String> {
+        let mut operations = active
             .lock()
-            .map_err(|_| "Website workspace is unavailable.")?
-            .insert(id.into())
-        {
+            .map_err(|_| "Output workspace is unavailable.")?;
+        if operations.contains("__app_update__") {
+            return Err(
+                "Wait for the app update to finish. Your saved request is still here.".into(),
+            );
+        }
+        if !operations.insert(id.into()) {
             return Err(
                 "This conversation is already being updated. Try again when it finishes.".into(),
             );
@@ -366,9 +370,10 @@ pub fn create_user_message(
         .active_operations
         .lock()
         .map_err(|_| "Website workspace is unavailable.")?;
-    if conversation_id
-        .as_ref()
-        .is_some_and(|id| active.contains(id))
+    if active.contains("__app_update__")
+        || conversation_id
+            .as_ref()
+            .is_some_and(|id| active.contains(id))
     {
         return Err("Wait for this response to finish. Your draft is still here.".into());
     }
@@ -671,7 +676,7 @@ fn website_action(
     ))
 }
 
-fn require_authorization(
+pub(crate) fn require_authorization(
     store: &mut ApprovalStore,
     policy: &Policy,
     action: &Action,
@@ -679,7 +684,7 @@ fn require_authorization(
 ) -> Result<(), String> {
     match store.authorize(policy, action, token)? {
         Decision::Allow => Ok(()),
-        Decision::ReviewRequired => Err("Review this website action before continuing.".into()),
+        Decision::ReviewRequired => Err("Review this action before continuing.".into()),
     }
 }
 
@@ -741,6 +746,19 @@ pub fn approve_action(
         .map_err(|_| "Action approval is unavailable.")?
         .get_binding(&review_id)?;
     let pieces = binding.operation.split(':').collect::<Vec<_>>();
+    if pieces.first() == Some(&"artifact") {
+        let current = crate::artifact_commands::reconstruct_binding(
+            &*database(&state)?,
+            &crate::artifact_commands::root(&app)?,
+            &binding,
+            crate::artifact_commands::validate_content,
+        )?;
+        return state
+            .approvals
+            .lock()
+            .map_err(|_| "Action approval is unavailable.")?
+            .approve(&review_id, &current);
+    }
     let (operation, target) = match pieces.as_slice() {
         ["website", "generate", _] => ("generate", None),
         ["website", "restore", target, _] => (
@@ -919,6 +937,11 @@ mod tests {
         assert!(ConversationOperation::begin(&active, "conversation-a").is_err());
         assert!(ConversationOperation::begin(&active, "conversation-b").is_ok());
         drop(first);
+        assert!(ConversationOperation::begin(&active, "conversation-a").is_ok());
+        active.lock().unwrap().insert("__app_update__".into());
+        assert!(ConversationOperation::begin(&active, "conversation-a").is_err());
+        assert!(ConversationOperation::begin(&active, "conversation-b").is_err());
+        active.lock().unwrap().remove("__app_update__");
         assert!(ConversationOperation::begin(&active, "conversation-a").is_ok());
     }
 

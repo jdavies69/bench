@@ -7,7 +7,7 @@ import App from "./App";
 const nativeMock = vi.hoisted(() => ({
   snapshot: vi.fn(), messages: vi.fn(), toolActivity: vi.fn(), createMessage: vi.fn(), stream: vi.fn(), loadWebsite: vi.fn(),
   websiteRevisions: vi.fn(), generateWebsite: vi.fn(), restoreWebsite: vi.fn(), prepareWebsiteAction: vi.fn(), approveAction: vi.fn(),
-  configureWebSearch: vi.fn(),
+  configureWebSearch: vi.fn(), loadArtifact: vi.fn(), generateArtifact: vi.fn(), generateMediaOutput: vi.fn(), artifactRevisions: vi.fn(), restoreArtifact: vi.fn(), prepareArtifactAction: vi.fn(), exportArtifact: vi.fn(), saveArtifactEdits: vi.fn(),
   saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(), connectOpenRouter: vi.fn(), cancelOpenRouterConnect: vi.fn(),
   openOpenRouterUsage: vi.fn(), openOpenRouterBilling: vi.fn(),
   openRouterUsage: vi.fn(),
@@ -31,6 +31,10 @@ beforeEach(() => {
   nativeMock.toolActivity.mockResolvedValue([]);
   nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [conversation] }); return conversation; });
   nativeMock.loadWebsite.mockResolvedValue(null);
+  nativeMock.loadArtifact.mockResolvedValue(null);
+  nativeMock.artifactRevisions.mockResolvedValue([{ revision: 1, current: true }]);
+  nativeMock.prepareArtifactAction.mockResolvedValue(null);
+  nativeMock.exportArtifact.mockResolvedValue(true);
   nativeMock.prepareWebsiteAction.mockResolvedValue({ id: "review-1", conversationId: "site-1", title: "Create this website?", detail: "Create a static website from your saved request and open its preview." });
   nativeMock.approveAction.mockResolvedValue("one-use-grant");
   nativeMock.generateWebsite.mockResolvedValue(site);
@@ -45,7 +49,7 @@ describe("Web search settings", () => {
     await user.click(await screen.findByRole("button", { name: "Settings" }));
     expect(screen.getByRole("heading", { name: "Usage & billing" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Data & privacy" })).toBeTruthy();
-    expect(screen.getByText("Updates are installed manually. Automatic updates are not available yet.")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Automatic updates" })).toBeTruthy();
     expect(nativeMock.openRouterUsage).not.toHaveBeenCalled();
     nativeMock.openRouterUsage.mockResolvedValue({ usageDaily: 0, usageWeekly: 0.1, usageMonthly: 1.5, usageTotal: 2, limit: null, limitRemaining: null, limitReset: null, byokUsageMonthly: null });
     await user.click(screen.getByRole("button", { name: "Check usage" }));
@@ -264,5 +268,43 @@ describe("Fresh install and input safety", () => {
     fireEvent.keyDown(input, { key: "Enter", isComposing: true, keyCode: 229 });
     expect(nativeMock.createMessage).not.toHaveBeenCalled();
     expect((input as HTMLTextAreaElement).value).toBe("Draft");
+  });
+});
+
+const documentArtifact = { version: 1, kind: "document", revision: 1, requestCount: 1, content: { title: "Local brief", markdown: "A saved **brief**" } };
+describe("Artifact workflows", () => {
+  it.each(["document", "presentation", "image", "voice"])("saves and authorizes %s generation through its native provider", async (kind) => {
+    const created = { ...conversation, id: "artifact-1", title: "Make an output", outputType: kind, outputSelection: kind };
+    const artifact = kind === "document" ? documentArtifact : kind === "presentation" ? { ...documentArtifact, kind, content: { title: "Local deck", slides: [{ title: "First slide", body: "Body", notes: "" }] } } : { ...documentArtifact, kind, content: { mimeType: kind === "image" ? "image/png" : "audio/mpeg", dataBase64: "aGVsbG8=", model: "fixture", generationId: "fixture", prompt: "Saved request", voice: null } };
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); return created; });
+    nativeMock.prepareArtifactAction.mockResolvedValue({ id: "artifact-review", conversationId: created.id, title: "Create this output?", detail: "Save an immutable output." });
+    nativeMock.generateArtifact.mockResolvedValue(artifact); nativeMock.generateMediaOutput.mockResolvedValue(artifact);
+    const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Make an output"); await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Create this output?"); expect(nativeMock.generateArtifact).not.toHaveBeenCalled(); expect(nativeMock.generateMediaOutput).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const generation = kind === "image" || kind === "voice" ? nativeMock.generateMediaOutput : nativeMock.generateArtifact;
+    await waitFor(() => expect(generation).toHaveBeenCalledWith(created.id, "one-use-grant"));
+    await user.click(await screen.findByRole("button", { name: kind === "document" ? "Export document" : kind === "presentation" ? "Export presentation" : kind === "image" ? "Export image" : "Export audio" }));
+    await waitFor(() => expect(nativeMock.exportArtifact).toHaveBeenCalledWith(created.id, kind === "image" || kind === "voice" ? "binary" : "text"));
+  });
+  it("loads a saved document after restart and preserves it through a failed revision", async () => {
+    const created = { ...conversation, outputType: "document", outputSelection: "document", title: "Saved document" };
+    nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); nativeMock.loadArtifact.mockResolvedValue(documentArtifact);
+    nativeMock.messages.mockResolvedValue([userMessage, { ...userMessage, id: "message-2", content: "Revise the brief" }]); nativeMock.generateArtifact.mockRejectedValue(new Error("provider failed"));
+    const user = userEvent.setup(); render(<App />); await user.click(await screen.findByRole("button", { name: "Saved document" }));
+    await screen.findByRole("heading", { name: "Local brief" }); expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Retry" })); await waitFor(() => expect(nativeMock.generateArtifact).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("heading", { name: "Local brief" })).toBeTruthy(); expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy(); expect(nativeMock.createMessage).not.toHaveBeenCalled();
+  });
+  it("restores a saved artifact version without consuming an unanswered revision", async () => {
+    const created = { ...conversation, outputType: "document", title: "Saved document" };
+    nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); nativeMock.loadArtifact.mockResolvedValue({ ...documentArtifact, revision: 2 });
+    nativeMock.messages.mockResolvedValue([userMessage, { ...userMessage, id: "message-2", content: "Pending revision" }]);
+    nativeMock.artifactRevisions.mockResolvedValue([{ revision: 1, current: false }, { revision: 2, current: true }]); nativeMock.restoreArtifact.mockResolvedValue(documentArtifact);
+    const user = userEvent.setup(); render(<App />); await user.click(await screen.findByRole("button", { name: "Saved document" }));
+    await user.click(await screen.findByLabelText("Output versions")); await user.click(screen.getByRole("button", { name: "Restore version 1" }));
+    await waitFor(() => expect(nativeMock.restoreArtifact).toHaveBeenCalledWith(created.id, 1, undefined));
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy(); expect(screen.getByRole("heading", { name: "Local brief" })).toBeTruthy();
   });
 });

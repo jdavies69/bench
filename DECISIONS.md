@@ -2,6 +2,9 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Publish this repository as a free open-source project under MIT; use its GitHub Releases for signed updates. | Explicit user authorization supersedes a separate public binary-only repository. User delegated license selection; MIT permits reuse with simple attribution. OpenRouter usage remains user-funded. |
+| 2026-09-30 | Add automatic app updates through signed Tauri updater packages. | User requests replacing repeated DMG drag/Replace. Prepare and test local update flow; public release feed, signatures, and clean-machine install are required before claiming updates live. |
+| 2026-09-30 | Design optional monthly AI-budget-aware routing and opt-in stronger-model comparisons. | User proposal accepted for exploration after current output workflows. Prefer cost-efficient capable models, show real comparison costs, and never spend on undisclosed comparison calls; no Bench account or billing backend. |
 | 2026-09-30 | Show only OpenRouter in Connections and model settings; remove the other-provider onboarding route. | User requested removal of OpenAI, Anthropic, and xAI connection controls. Preserve legacy credentials and provider implementation; do not erase user data. |
 | 2026-09-30 | Use Connect OpenRouter browser sign-in with OAuth PKCE; keep manual API-key entry as a Settings fallback. | User-selected simpler onboarding supersedes create/copy/paste. Rust receives the localhost callback, exchanges the code, and stores the credential in Keychain; no Bench account or paid model validation. |
 | 2026-09-30 | Activate all existing output types incrementally with real generation, persistence, and export/playback. | Latest user request supersedes deferring breadth until Website is excellent. Reassess OpenRouter Agent SDK reuse before adding a custom Agent runtime; never label placeholders live. |

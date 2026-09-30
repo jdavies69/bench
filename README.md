@@ -1,6 +1,6 @@
 # Bench v0.0.1
 
-Bench is a local desktop AI workspace built with Tauri 2, React, TypeScript, Rust, and SQLite. It supports streaming chat, local search, automatic project grouping, manual project moves, output routing, static Website workspaces, and persistent settings.
+Bench is a free, MIT-licensed open-source desktop AI workspace built with Tauri 2, React, TypeScript, Rust, and SQLite. It supports streaming chat, local search, automatic project grouping, manual project moves, output routing, static Website workspaces, and persistent settings.
 
 ## Run
 
@@ -20,7 +20,7 @@ On macOS, startup and connection status inspect Keychain metadata without readin
 
 SQLite lives in Tauri's app data directory under the `app.bench.desktop` identifier. Projects, conversations, messages, output intent, sidebar preference, tool metadata, and settings stay on the device. Bench assigns a project when a conversation clearly names one, and can update an uncertain assignment as more context arrives. Uncertain or ambiguous conversations go to Miscellaneous. A manual project move stays fixed.
 
-`Auto` classifies a new request. Chat works end to end. Website creates and revises static `index.html`, `style.css`, and optional additional HTML pages in a per-conversation app-data workspace. The preview runs in a sandboxed iframe with scripts blocked; Bench does not run generated commands. Application, Presentation, Document, Image, Agent, and Voice currently open clear placeholder workspaces. The conversation stays available beside an output workspace, which can be closed and reopened.
+`Auto` classifies a new request. Chat works end to end. Website creates and revises static `index.html`, `style.css`, and optional additional HTML pages in a per-conversation app-data workspace. The preview runs in a sandboxed iframe with scripts blocked; Bench does not run generated commands. Document, Presentation, Image, Voice, and bounded declarative Application workflows now support generation, revisions, persistence, and export. Application supports forms/calculators, not arbitrary generated programs. Agent remains a placeholder. Automated fake-provider tests pass; paid live checks remain pending. The conversation stays available beside an output workspace, which can be closed and reopened.
 
 Generated Website revisions are stored under `website-workspaces/<conversation-id>/revision-<number>`. Bench activates a revision only after its files are written and validated. Revisions patch the existing files, preserve previous versions, and keep the last usable preview on a failed generation. The Website workspace's **Versions** control lets you restore a saved version. Generated filenames are restricted to top-level HTML files and `style.css`; active HTML content is rejected.
 
@@ -46,3 +46,7 @@ Execution and approval preferences are enforced in Rust for Website creation, re
 Streaming can be exercised end to end once a valid provider key is saved. The local test suite covers output intent, project grouping and manual reassignment, stream event parsing, error mapping, website creation and revision using a fake provider, hosted-search request and citation parsing, failed SQLite writes, and reopening the database. Live web search requires a connected OpenRouter key and remains unverified.
 
 CI builds the frontend and runs frontend and beta-checker tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Packaged builds are local development artifacts until Developer ID signing, notarization, and clean-machine installation are verified. See [external Mac beta preparation](docs/macos-beta.md) for the read-only artifact checker and acceptance steps.
+
+## App updates
+
+Signed updater support verifies the package and its announced version before installation. Settings supports automatic download and an explicit restart to install. The release feed is not configured yet; automatic delivery and an actual in-place upgrade remain pending. The updater signing key is separate from Apple Developer ID signing.

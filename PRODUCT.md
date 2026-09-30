@@ -18,7 +18,8 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 - Local projects, conversations, search, and settings. OpenRouter Chat can use hosted web search with the existing OpenRouter key; the tool identity and authorization remain provider-independent.
 - Connect OpenRouter through browser sign-in (OAuth PKCE), with automatic return and credential storage in Keychain. Setup can be skipped or reopened from Settings; manual OpenRouter key entry remains available. Settings exposes only OpenRouter; legacy provider credentials remain intact. Connecting does not make a model request.
 - Native OpenRouter usage in Settings: manual refresh shows spend and the connected key’s limit. These figures cover all apps using that key, not an account credit balance.
-- Application, Presentation, Document, Image, Agent, and Voice retain requests in explicit placeholder workspaces.
+- Document and Presentation generation/revision with local editing and export; Image generation/revision and raster export; Voice drafting, audio playback, and export. Application supports bounded local forms/calculators with saved inputs and interactive HTML export. These workflows pass fake-provider tests; paid live generation verification is pending. Agent remains an explicit placeholder.
+- Signed updater verification and native Settings controls are implemented. Automatic delivery is pending a configured public release feed and an in-place upgrade test.
 
 ## Boundaries
 

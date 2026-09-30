@@ -21,6 +21,21 @@ export interface WebsitePage { path: string; html: string; }
 export interface WebsiteState { pages: WebsitePage[]; css: string; revision: number; requestCount: number; }
 export interface OpenRouterUsage { usageDaily: number; usageWeekly: number; usageMonthly: number; usageTotal: number; limit: number | null; limitRemaining: number | null; limitReset: string | null; byokUsageMonthly: number | null; }
 
+export type TextArtifactContent = { title: string; markdown: string } | { title: string; slides: { title: string; body: string; notes: string }[] };
+export type ApplicationExpression = { op: "constant"; value: number } | { op: "input"; id: string } | { op: "add" | "subtract" | "multiply" | "divide" | "min" | "max"; left: ApplicationExpression; right: ApplicationExpression };
+export interface ApplicationContent { title: string; description: string; fields: { id: string; label: string; type: "number" | "text" | "select" | "toggle"; default: number | string | boolean; options?: string[] | null }[]; outputs: { label: string; expression: ApplicationExpression }[]; }
+export type ApplicationValues = Record<string, number | string | boolean>;
+export interface MediaContent { mimeType: string; dataBase64: string; model: string; generationId: string | null; prompt: string; voice: string | null; }
+type ArtifactBase = { version: number; revision: number; requestCount: number };
+export type ArtifactState = ArtifactBase & (
+  { kind: "document"; content: { title: string; markdown: string } } |
+  { kind: "presentation"; content: { title: string; slides: { title: string; body: string; notes: string }[] } } |
+  { kind: "application"; content: ApplicationContent } |
+  { kind: "image" | "voice"; content: MediaContent }
+);
+export type WorkspaceState = (WebsiteState & { kind: "website" }) | ArtifactState;
+export type ArtifactExportFormat = "text" | "html" | "binary";
+
 export const native = {
   snapshot: () => invoke<Snapshot>("load_snapshot"),
   messages: (conversationId: string) => invoke<Message[]>("load_messages", { conversationId }),
@@ -51,6 +66,16 @@ export const native = {
   removeWebSearchKey: () => invoke<Settings>("remove_web_search_key"),
   configureWebSearch: (backend: WebSearchBackend, searxngUrl: string) => invoke<Settings>("configure_web_search", { backend, searxngUrl }),
   search: (query: string) => invoke<Conversation[]>("search_conversations", { query }),
+  loadApplicationValues: (conversationId: string) => invoke<ApplicationValues>("load_application_values", { conversationId }),
+  saveApplicationValues: (conversationId: string, revision: number, values: ApplicationValues) => invoke<ApplicationValues>("save_application_values", { conversationId, revision, values }),
+  loadArtifact: (conversationId: string) => invoke<ArtifactState | null>("load_artifact", { conversationId }),
+  generateArtifact: (conversationId: string, approvalToken?: string) => invoke<ArtifactState>("generate_artifact", { conversationId, approvalToken }),
+  generateMediaOutput: (conversationId: string, approvalToken?: string) => invoke<ArtifactState>("generate_media_output", { conversationId, approvalToken }),
+  artifactRevisions: (conversationId: string) => invoke<WebsiteRevision[]>("list_artifact_revisions", { conversationId }),
+  restoreArtifact: (conversationId: string, revision: number, approvalToken?: string) => invoke<ArtifactState>("restore_artifact_revision", { conversationId, revision, approvalToken }),
+  saveArtifactEdits: (conversationId: string, content: TextArtifactContent, approvalToken?: string) => invoke<ArtifactState>("save_artifact_edits", { conversationId, content, approvalToken }),
+  prepareArtifactAction: (conversationId: string, operation: "generate" | "restore" | "edit", targetRevision?: number, content?: TextArtifactContent) => invoke<ActionReview | null>("prepare_artifact_action", { conversationId, operation, targetRevision, content }),
+  exportArtifact: (conversationId: string, format: ArtifactExportFormat) => invoke<boolean>("export_artifact", { conversationId, format }),
   loadWebsite: (conversationId: string) => invoke<WebsiteState | null>("load_website", { conversationId }),
   generateWebsite: (conversationId: string, approvalToken?: string) => invoke<WebsiteState>("generate_website", { conversationId, approvalToken }),
   websiteRevisions: (conversationId: string) => invoke<WebsiteRevision[]>("list_website_revisions", { conversationId }),

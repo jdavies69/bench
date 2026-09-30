@@ -37,4 +37,4 @@ Use a separate Mac or clean test account with no existing Bench database, Keycha
 6. Live OpenRouter search still requires separate specific authorization. Record citations and failure handling only after an authorized run.
 7. Replace the app with the next signed build and verify existing local data and Keychain access survive. Test Keychain access across the development-to-Developer-ID signing transition before recommending upgrades to existing users.
 
-Record each check as passed, failed, or pending with the exact artifact and environment. Share only after the artifact checks and required manual acceptance pass. Accounts, billing, automatic updating, and additional outputs remain outside this release scope.
+Record each check as passed, failed, or pending with the exact artifact and environment. Share only after the artifact checks and required manual acceptance pass. Accounts and billing remain deferred. Automatic updating and the existing output types are now requested release work; updater delivery and paid live output verification remain pending.
