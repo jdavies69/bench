@@ -217,6 +217,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .setup-open-keys, .setup-help { border: 0; border-radius: var(--radius-sm); padding: 8px 12px; background: #eeedea; color: var(--ink); font-size: 12px; }
 .setup-open-keys { margin: 0 0 24px; }
 .setup-error { color: #735442; font-size: 12px; line-height: 1.5; }
+.usage-metrics { margin: 18px 0 0; }
+.usage-row { display: flex; justify-content: space-between; gap: 24px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.metric-label { color: #676a6e; }
+.metric-value { margin: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+.usage-error { color: #735442; font-size: 12px; line-height: 1.5; }
 .setup-help { margin-bottom: 12px; }
 .setup-open-keys:hover, .setup-help:hover { background: #e3e2df; }
 .openrouter-setup .quiet-note { padding: 10px 0; line-height: 1.5; }

@@ -2,6 +2,8 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Use Connect OpenRouter browser sign-in with OAuth PKCE; keep manual API-key entry as a Settings fallback. | User-selected simpler onboarding supersedes create/copy/paste. Rust receives the localhost callback, exchanges the code, and stores the credential in Keychain; no Bench account or paid model validation. |
+| 2026-09-30 | Activate all existing output types incrementally with real generation, persistence, and export/playback. | Latest user request supersedes deferring breadth until Website is excellent. Reassess OpenRouter Agent SDK reuse before adding a custom Agent runtime; never label placeholders live. |
 | 2026-09-30 | Guide fresh users to create their own OpenRouter key in the system browser and paste it into Bench. | User-requested minimal onboarding: no Bench account, OAuth integration, billing service, or paid validation request. Keep other providers and saved work available. |
 | 2026-09-30 | Ship BYOK first and defer accounts/billing for the bare-minimum public release. | Latest user choice supersedes the managed-plan release target. Apple Silicon first remains. A future managed plan would use a monthly fixed balance and cost pass-through with roughly 5% markup; final economics are unresolved. |
 | 2026-09-30 | Target Apple Silicon first with a Bench paid plan and included usage for public release. | User-selected release model; supersedes deferring accounts/billing. Price, allowance, backend services, and credentials remain pending. Keep BYOK working until managed access is real. |

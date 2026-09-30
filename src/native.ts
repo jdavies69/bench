@@ -19,6 +19,7 @@ export interface ActionReview { id: string; title: string; detail: string; conve
 export interface WebsiteRevision { revision: number; current: boolean; }
 export interface WebsitePage { path: string; html: string; }
 export interface WebsiteState { pages: WebsitePage[]; css: string; revision: number; requestCount: number; }
+export interface OpenRouterUsage { usageDaily: number; usageWeekly: number; usageMonthly: number; usageTotal: number; limit: number | null; limitRemaining: number | null; limitReset: string | null; byokUsageMonthly: number | null; }
 
 export const native = {
   snapshot: () => invoke<Snapshot>("load_snapshot"),
@@ -37,9 +38,12 @@ export const native = {
     invoke<Settings>("update_settings", { executionBehavior, approvalBehavior }),
   setSidebarCollapsed: (collapsed: boolean) => invoke<Settings>("set_sidebar_collapsed", { collapsed }),
   saveProviderKey: (provider: ProviderId, key: string) => invoke<void>("save_provider_key", { provider, key }),
+  connectOpenRouter: () => invoke<void>("connect_openrouter"),
+  cancelOpenRouterConnect: () => invoke<void>("cancel_openrouter_connect"),
   openOpenRouterSetup: () => invoke<void>("open_openrouter_setup"),
   openOpenRouterUsage: () => invoke<void>("open_openrouter_usage"),
   openOpenRouterBilling: () => invoke<void>("open_openrouter_billing"),
+  openRouterUsage: () => invoke<OpenRouterUsage>("load_openrouter_usage"),
   removeProviderKey: (provider: ProviderId) => invoke<void>("remove_provider_key", { provider }),
   selectProvider: (provider: ProviderId) => invoke<Settings>("select_provider", { provider }),
   updateModel: (provider: ProviderId, model: string) => invoke<void>("update_model", { provider, model }),

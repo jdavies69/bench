@@ -1,4 +1,10 @@
-use std::{collections::HashSet, sync::Mutex};
+use std::{
+    collections::HashSet,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+};
 
 use rusqlite::Connection;
 use serde::Serialize;
@@ -6,19 +12,20 @@ use tauri::{ipc::Channel, AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::{
-    db, key_store, output,
+    db, key_store, oauth, output,
     policy::{
         Action, ActionBinding, ActionCategory, ActionOrigin, ApprovalStore, Decision, Policy,
     },
     provider::{HttpProvider, ModelProvider, ProviderId, ProviderMessage, ProviderStatus},
     tools::{requires_current_info, ToolKind},
-    website,
+    usage, website,
 };
 
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub approvals: Mutex<ApprovalStore>,
     pub active_operations: Mutex<HashSet<String>>,
+    pub oauth_connection: Mutex<Option<(String, Arc<AtomicBool>)>>,
 }
 
 #[derive(Serialize)]
@@ -127,6 +134,84 @@ pub fn load_snapshot(state: State<'_, AppState>) -> Result<db::Snapshot, String>
     })
 }
 
+struct OAuthOperation<'a> {
+    active: &'a Mutex<Option<(String, Arc<AtomicBool>)>>,
+    id: String,
+}
+impl Drop for OAuthOperation<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.active.lock() {
+            if active.as_ref().is_some_and(|(id, _)| id == &self.id) {
+                *active = None;
+            }
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn connect_openrouter(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    {
+        let mut active = state
+            .oauth_connection
+            .lock()
+            .map_err(|_| "Connection unavailable.")?;
+        if active.is_some() {
+            return Err("An OpenRouter connection is already in progress.".into());
+        }
+        *active = Some((id.clone(), cancelled.clone()));
+    }
+    let _operation = OAuthOperation {
+        active: &state.oauth_connection,
+        id: id.clone(),
+    };
+    let key = oauth::connect(
+        |url| {
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|_| "Could not open OpenRouter.".to_string())
+        },
+        cancelled.clone(),
+    )
+    .await?;
+    // Serialize cancellation/replacement with credential storage. Only this exact
+    // still-active attempt may save; cancelled browser tabs cannot replace a key.
+    let active = state
+        .oauth_connection
+        .lock()
+        .map_err(|_| "Connection unavailable.")?;
+    if cancelled.load(Ordering::SeqCst)
+        || !active.as_ref().is_some_and(|(current, _)| current == &id)
+    {
+        return Err("OpenRouter connection cancelled.".into());
+    }
+    let conn = database(&state)?;
+    key_store::save(ProviderId::OpenRouter, &key)
+        .map_err(|_| "Could not save your OpenRouter connection.")?;
+    db::select_provider(&conn, ProviderId::OpenRouter)
+        .map_err(|_| "Could not select OpenRouter.")?;
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_openrouter_connect(state: State<'_, AppState>) -> Result<(), String> {
+    cancel_connection(&state)
+}
+fn cancel_connection(state: &AppState) -> Result<(), String> {
+    let mut active = state
+        .oauth_connection
+        .lock()
+        .map_err(|_| "Connection unavailable.")?;
+    if let Some((_, cancelled)) = active.take() {
+        cancelled.store(true, Ordering::SeqCst);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn open_openrouter_setup(app: AppHandle) -> Result<(), String> {
     app.opener()
@@ -150,6 +235,12 @@ pub fn open_openrouter_billing(app: AppHandle) -> Result<(), String> {
     app.opener()
         .open_url("https://openrouter.ai/settings/credits", None::<&str>)
         .map_err(|_| "Could not open OpenRouter billing. Visit openrouter.ai/settings/credits in your browser.".into())
+}
+
+#[tauri::command]
+pub async fn load_openrouter_usage() -> Result<usage::OpenRouterUsage, String> {
+    let key = key_store::active_key(ProviderId::OpenRouter)?;
+    usage::load_openrouter_usage(&key).await
 }
 
 #[tauri::command]
@@ -186,14 +277,45 @@ pub fn save_provider_key(
     key: String,
 ) -> Result<(), String> {
     let provider = ProviderId::parse(&provider)?;
+    let mut connection = if provider == ProviderId::OpenRouter {
+        Some(
+            state
+                .oauth_connection
+                .lock()
+                .map_err(|_| "Connection unavailable.")?,
+        )
+    } else {
+        None
+    };
+    if let Some(active) = connection.as_mut() {
+        if let Some((_, cancelled)) = active.take() {
+            cancelled.store(true, Ordering::SeqCst);
+        }
+    }
     key_store::save(provider, &key)?;
     db::select_provider(&*database(&state)?, provider)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn remove_provider_key(provider: String) -> Result<(), String> {
-    key_store::remove(ProviderId::parse(&provider)?)
+pub fn remove_provider_key(state: State<'_, AppState>, provider: String) -> Result<(), String> {
+    let provider = ProviderId::parse(&provider)?;
+    let mut connection = if provider == ProviderId::OpenRouter {
+        Some(
+            state
+                .oauth_connection
+                .lock()
+                .map_err(|_| "Connection unavailable.")?,
+        )
+    } else {
+        None
+    };
+    if let Some(active) = connection.as_mut() {
+        if let Some((_, cancelled)) = active.take() {
+            cancelled.store(true, Ordering::SeqCst);
+        }
+    }
+    key_store::remove(provider)
 }
 
 #[tauri::command]
@@ -817,5 +939,92 @@ mod tests {
         assert_eq!(db::messages(&conn, &conversation.id).unwrap().len(), 1);
         save_completed_response(&conn, &conversation.id, "Complete answer", Ok(())).unwrap();
         assert_eq!(db::messages(&conn, &conversation.id).unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod oauth_tests {
+    use super::*;
+    use std::{sync::mpsc, thread, time::Duration};
+
+    fn state() -> AppState {
+        AppState {
+            db: Mutex::new(Connection::open_in_memory().unwrap()),
+            approvals: Mutex::new(ApprovalStore::default()),
+            active_operations: Mutex::new(HashSet::new()),
+            oauth_connection: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn old_operation_drop_preserves_replacement_and_cancelled_flag() {
+        let state = state();
+        let old_cancelled = Arc::new(AtomicBool::new(false));
+        *state.oauth_connection.lock().unwrap() = Some(("old".into(), old_cancelled.clone()));
+        let old_operation = OAuthOperation {
+            active: &state.oauth_connection,
+            id: "old".into(),
+        };
+        cancel_connection(&state).unwrap();
+        assert!(old_cancelled.load(Ordering::SeqCst));
+        let new_cancelled = Arc::new(AtomicBool::new(false));
+        *state.oauth_connection.lock().unwrap() = Some(("new".into(), new_cancelled.clone()));
+        drop(old_operation);
+        assert_eq!(
+            state.oauth_connection.lock().unwrap().as_ref().unwrap().0,
+            "new"
+        );
+        assert!(!new_cancelled.load(Ordering::SeqCst));
+        assert!(old_cancelled.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn current_operation_drop_releases_only_its_own_slot() {
+        let state = state();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        *state.oauth_connection.lock().unwrap() = Some(("current".into(), cancelled.clone()));
+        let operation = OAuthOperation {
+            active: &state.oauth_connection,
+            id: "current".into(),
+        };
+        drop(operation);
+        assert!(state.oauth_connection.lock().unwrap().is_none());
+        assert!(!cancelled.load(Ordering::SeqCst));
+        cancel_connection(&state).unwrap();
+        assert!(state.oauth_connection.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn cancellation_waits_until_credential_mutation_guard_is_released() {
+        let state = Arc::new(state());
+        let cancelled = Arc::new(AtomicBool::new(false));
+        *state.oauth_connection.lock().unwrap() = Some(("current".into(), cancelled.clone()));
+        // Simulate the synchronous Keychain/DB mutation region without reading
+        // or changing credentials. It holds the same guard as command writes.
+        let mutation_guard = state.oauth_connection.lock().unwrap();
+        let mutation_complete = Arc::new(AtomicBool::new(false));
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+        let worker_state = state.clone();
+        let worker_complete = mutation_complete.clone();
+        let worker = thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            cancel_connection(&worker_state).unwrap();
+            finished_tx
+                .send(worker_complete.load(Ordering::SeqCst))
+                .unwrap();
+        });
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(
+            finished_rx.recv_timeout(Duration::from_millis(100)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert!(!cancelled.load(Ordering::SeqCst));
+        mutation_complete.store(true, Ordering::SeqCst);
+        drop(mutation_guard);
+        assert!(finished_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        worker.join().unwrap();
+        assert!(cancelled.load(Ordering::SeqCst));
+        assert!(state.oauth_connection.lock().unwrap().is_none());
     }
 }

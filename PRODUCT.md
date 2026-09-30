@@ -16,13 +16,14 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 - Local streaming Chat with OpenRouter, OpenAI, Anthropic, and xAI API keys.
 - Static Website generation and conversational file revisions in isolated local workspaces; script-free preview beside the conversation.
 - Local projects, conversations, search, and settings. OpenRouter Chat can use hosted web search with the existing OpenRouter key; the tool identity and authorization remain provider-independent.
-- Short OpenRouter setup on a fresh disconnected workspace: open the key page in the system browser, create/copy a key, and return to connect. Setup can be skipped or reopened from Settings; another provider remains available. Saving a key does not make a model request.
+- Connect OpenRouter through browser sign-in (OAuth PKCE), with automatic return and credential storage in Keychain. Setup can be skipped or reopened from Settings; manual keys and other providers remain available. Connecting does not make a model request.
+- Native OpenRouter usage in Settings: manual refresh shows spend and the connected key’s limit. These figures cover all apps using that key, not an account credit balance.
 - Application, Presentation, Document, Image, Agent, and Voice retain requests in explicit placeholder workspaces.
 
 ## Boundaries
 
 SQLite owns local product data. Rust owns providers, tools, actions, and authorization. macOS Keychain owns credentials. Output modules are independent from providers and share one adaptive workspace.
 
-Website quality and dependable local behavior come before output breadth. Preview section links stay inside the current page, and conflicting Mac filenames are rejected before saving revisions. macOS connection status uses Keychain metadata; opening the app does not need to read API-key passwords. The first public release targets Apple Silicon with users' own API keys. Accounts, billing, cloud sync, organizations, mobile, marketplace, deployment, and new service integrations remain deferred. Rust currently enforces execution and approval preferences for Website actions; new action types must pass through the same policy boundary.
+Activate the existing output types with dependable generation, persistence, and useful export/playback; unfinished outputs remain explicitly marked. Preview section links stay inside the current page, and conflicting Mac filenames are rejected before saving revisions. macOS connection status uses Keychain metadata; opening the app does not need to read API-key passwords. The first public release targets Apple Silicon with users' own API keys. Accounts, billing, cloud sync, organizations, mobile, marketplace, deployment, and new service integrations remain deferred. Rust currently enforces execution and approval preferences for Website actions; new action types must pass through the same policy boundary.
 
 When Bench-managed usage exists, ordinary users should not need to see provider keys or model setup. Keep BYOK available in Advanced for users who choose it. Until managed usage works, the connection path must remain discoverable so a fresh install can run Chat.

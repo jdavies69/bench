@@ -2,10 +2,12 @@ mod commands;
 mod db;
 mod grouping;
 mod key_store;
+mod oauth;
 mod output;
 mod policy;
 mod provider;
 mod tools;
+mod usage;
 mod website;
 
 use tauri::Manager;
@@ -20,15 +22,19 @@ pub fn run() {
             app.manage(commands::AppState {
                 db: std::sync::Mutex::new(conn),
                 approvals: std::sync::Mutex::new(policy::ApprovalStore::default()),
+                oauth_connection: std::sync::Mutex::new(None),
                 active_operations: std::sync::Mutex::new(std::collections::HashSet::new()),
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::load_snapshot,
+            commands::connect_openrouter,
+            commands::cancel_openrouter_connect,
             commands::open_openrouter_setup,
             commands::open_openrouter_usage,
             commands::open_openrouter_billing,
+            commands::load_openrouter_usage,
             commands::save_provider_key,
             commands::remove_provider_key,
             commands::select_provider,

@@ -8,8 +8,9 @@ const nativeMock = vi.hoisted(() => ({
   snapshot: vi.fn(), messages: vi.fn(), toolActivity: vi.fn(), createMessage: vi.fn(), stream: vi.fn(), loadWebsite: vi.fn(),
   websiteRevisions: vi.fn(), generateWebsite: vi.fn(), restoreWebsite: vi.fn(), prepareWebsiteAction: vi.fn(), approveAction: vi.fn(),
   configureWebSearch: vi.fn(),
-  saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(),
+  saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(), connectOpenRouter: vi.fn(), cancelOpenRouterConnect: vi.fn(),
   openOpenRouterUsage: vi.fn(), openOpenRouterBilling: vi.fn(),
+  openRouterUsage: vi.fn(),
 }));
 vi.mock("./native", () => ({ native: nativeMock }));
 
@@ -45,9 +46,14 @@ describe("Web search settings", () => {
     expect(screen.getByRole("heading", { name: "Usage & billing" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Data & privacy" })).toBeTruthy();
     expect(screen.getByText("Updates are installed manually. Automatic updates are not available yet.")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "View OpenRouter usage ↗" }));
-    await waitFor(() => expect(nativeMock.openOpenRouterUsage).toHaveBeenCalledWith());
-    await user.click(screen.getByRole("button", { name: "Manage OpenRouter credits ↗" }));
+    expect(nativeMock.openRouterUsage).not.toHaveBeenCalled();
+    nativeMock.openRouterUsage.mockResolvedValue({ usageDaily: 0, usageWeekly: 0.1, usageMonthly: 1.5, usageTotal: 2, limit: null, limitRemaining: null, limitReset: null, byokUsageMonthly: null });
+    await user.click(screen.getByRole("button", { name: "Check usage" }));
+    await waitFor(() => expect(nativeMock.openRouterUsage).toHaveBeenCalledWith());
+    await screen.findByText("$1.50");
+    expect(screen.getByText("$0.00")).toBeTruthy();
+    expect(screen.getByText("Unlimited")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Manage credits" }));
     await waitFor(() => expect(nativeMock.openOpenRouterBilling).toHaveBeenCalledWith());
     expect(nativeMock.saveProviderKey).not.toHaveBeenCalled();
     expect(nativeMock.stream).not.toHaveBeenCalled();
@@ -161,19 +167,33 @@ describe("Website authorization flow", () => {
 describe("Fresh install and input safety", () => {
   it("offers setup on a fresh disconnected install, opens native help, and connects without inference", async () => {
     nativeMock.snapshot.mockResolvedValue({ ...snapshot, providers: [{ ...snapshot.providers[0], keySource: "none" }] });
-    nativeMock.saveProviderKey.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue(snapshot); });
+    nativeMock.connectOpenRouter.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue(snapshot); });
     const user = userEvent.setup(); render(<App />);
     await screen.findByRole("heading", { name: "Connect OpenRouter" });
-    await user.click(screen.getByRole("button", { name: "Open OpenRouter ↗" }));
-    expect(nativeMock.openOpenRouterSetup).toHaveBeenCalledWith();
-    await user.type(screen.getByLabelText("OpenRouter API key"), "test-secret");
-    await user.click(screen.getByRole("button", { name: "Connect" }));
+    await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await screen.findByRole("textbox", { name: "Message" });
-    expect(nativeMock.saveProviderKey).toHaveBeenCalledWith("openrouter", "test-secret");
+    expect(nativeMock.connectOpenRouter).toHaveBeenCalledWith();
+    expect(nativeMock.saveProviderKey).not.toHaveBeenCalled();
     expect(screen.queryByLabelText("OpenRouter API key")).toBeNull();
     expect(nativeMock.createMessage).not.toHaveBeenCalled();
     expect(nativeMock.stream).not.toHaveBeenCalled();
     expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
+  });
+  it("ignores a cancelled browser connection completing after a newer attempt starts", async () => {
+    nativeMock.snapshot.mockResolvedValue({ ...snapshot, providers: [{ ...snapshot.providers[0], keySource: "none" }] });
+    let finishOld!: () => void;
+    const old = new Promise<void>((resolve) => { finishOld = resolve; });
+    nativeMock.connectOpenRouter.mockReturnValueOnce(old).mockReturnValueOnce(new Promise(() => {}));
+    nativeMock.cancelOpenRouterConnect.mockResolvedValue(undefined);
+    const user = userEvent.setup(); render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Connect OpenRouter" }));
+    await user.click(screen.getByRole("button", { name: "Cancel connection" }));
+    await user.click(await screen.findByRole("button", { name: "Connect OpenRouter" }));
+    const reads = nativeMock.snapshot.mock.calls.length;
+    await act(async () => { finishOld(); await old; });
+    expect(nativeMock.snapshot).toHaveBeenCalledTimes(reads);
+    expect(screen.getByRole("button", { name: "Waiting for OpenRouter…" })).toBeTruthy();
+    expect(nativeMock.stream).not.toHaveBeenCalled();
   });
   it("keeps existing connected users in their workspace and offers setup from Settings", async () => {
     const user = userEvent.setup(); render(<App />);
@@ -181,7 +201,7 @@ describe("Fresh install and input safety", () => {
     expect(screen.queryByRole("heading", { name: "Connect OpenRouter" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("button", { name: /OpenRouter\s*Connected/ }));
-    await user.click(screen.getByRole("button", { name: "Get an OpenRouter key" }));
+    await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await screen.findByRole("heading", { name: "Connect OpenRouter" });
     await user.click(screen.getByRole("button", { name: "Set up later" }));
     await screen.findByRole("heading", { name: "Settings" });
@@ -204,7 +224,7 @@ describe("Fresh install and input safety", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Keep this idea");
     await user.click(screen.getByRole("button", { name: "Send message" }));
     await screen.findByRole("heading", { name: "Connect OpenRouter" });
-    expect(screen.getByLabelText("OpenRouter API key")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeTruthy();
     expect(nativeMock.createMessage).toHaveBeenCalledWith(null, "Keep this idea", "auto");
     expect(nativeMock.stream).not.toHaveBeenCalled();
     expect(nativeMock.generateWebsite).not.toHaveBeenCalled();
