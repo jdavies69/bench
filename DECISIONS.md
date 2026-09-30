@@ -2,6 +2,7 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Guide fresh users to create their own OpenRouter key in the system browser and paste it into Bench. | User-requested minimal onboarding: no Bench account, OAuth integration, billing service, or paid validation request. Keep other providers and saved work available. |
 | 2026-09-30 | Ship BYOK first and defer accounts/billing for the bare-minimum public release. | Latest user choice supersedes the managed-plan release target. Apple Silicon first remains. A future managed plan would use a monthly fixed balance and cost pass-through with roughly 5% markup; final economics are unresolved. |
 | 2026-09-30 | Target Apple Silicon first with a Bench paid plan and included usage for public release. | User-selected release model; supersedes deferring accounts/billing. Price, allowance, backend services, and credentials remain pending. Keep BYOK working until managed access is real. |
 | 2026-09-30 | Remove the Auto trigger outline while retaining the compact list. | User requested the sparse borderless composer control. |

@@ -16,6 +16,7 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 - Local streaming Chat with OpenRouter, OpenAI, Anthropic, and xAI API keys.
 - Static Website generation and conversational file revisions in isolated local workspaces; script-free preview beside the conversation.
 - Local projects, conversations, search, and settings. OpenRouter Chat can use hosted web search with the existing OpenRouter key; the tool identity and authorization remain provider-independent.
+- Short OpenRouter setup on a fresh disconnected workspace: open the key page in the system browser, create/copy a key, and return to connect. Setup can be skipped or reopened from Settings; another provider remains available. Saving a key does not make a model request.
 - Application, Presentation, Document, Image, Agent, and Voice retain requests in explicit placeholder workspaces.
 
 ## Boundaries

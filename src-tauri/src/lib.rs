@@ -26,6 +26,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::load_snapshot,
+            commands::open_openrouter_setup,
+            commands::open_openrouter_usage,
+            commands::open_openrouter_billing,
             commands::save_provider_key,
             commands::remove_provider_key,
             commands::select_provider,

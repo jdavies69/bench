@@ -3,6 +3,7 @@ use std::{collections::HashSet, sync::Mutex};
 use rusqlite::Connection;
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::{
     db, key_store, output,
@@ -124,6 +125,31 @@ pub fn load_snapshot(state: State<'_, AppState>) -> Result<db::Snapshot, String>
         web_search_key_source: key_store::web_search_key_source()?.into(),
         web_search_status: web_search_status.into(),
     })
+}
+
+#[tauri::command]
+pub fn open_openrouter_setup(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url("https://openrouter.ai/settings/keys", None::<&str>)
+        .map_err(|_| {
+            "Could not open OpenRouter. Visit openrouter.ai/settings/keys in your browser.".into()
+        })
+}
+
+#[tauri::command]
+pub fn open_openrouter_usage(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url("https://openrouter.ai/activity", None::<&str>)
+        .map_err(|_| {
+            "Could not open OpenRouter usage. Visit openrouter.ai/activity in your browser.".into()
+        })
+}
+
+#[tauri::command]
+pub fn open_openrouter_billing(app: AppHandle) -> Result<(), String> {
+    app.opener()
+        .open_url("https://openrouter.ai/settings/credits", None::<&str>)
+        .map_err(|_| "Could not open OpenRouter billing. Visit openrouter.ai/settings/credits in your browser.".into())
 }
 
 #[tauri::command]

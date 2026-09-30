@@ -210,6 +210,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .search-result:hover { background: var(--hover); }
 .search-result small, .quiet-note { color: var(--muted); font-size: 11px; }
 .quiet-note { padding: var(--space-3) var(--space-2); }
+.openrouter-setup { width: min(100% - 44px, 480px); }
+.setup-intro { margin: 18px 0 22px; color: #676a6e; font-size: 13px; line-height: 1.6; }
+.setup-steps { padding-left: 19px; margin: 0 0 24px; color: #545a5e; font-size: 13px; line-height: 1.6; }
+.setup-steps li { padding-left: 5px; margin-bottom: 12px; }
+.setup-open-keys, .setup-help { border: 0; border-radius: var(--radius-sm); padding: 8px 12px; background: #eeedea; color: var(--ink); font-size: 12px; }
+.setup-open-keys { margin: 0 0 24px; }
+.setup-error { color: #735442; font-size: 12px; line-height: 1.5; }
+.setup-help { margin-bottom: 12px; }
+.setup-open-keys:hover, .setup-help:hover { background: #e3e2df; }
+.openrouter-setup .quiet-note { padding: 10px 0; line-height: 1.5; }
+.openrouter-setup .connection-actions { justify-content: space-between; flex-wrap: wrap; }
 .settings-panel { width: min(100% - 44px, 660px); }
 .settings-section { margin-bottom: var(--space-6); }
 .settings-section:last-child { margin-bottom: 0; }

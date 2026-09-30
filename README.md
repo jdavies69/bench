@@ -8,6 +8,8 @@ Install Node dependencies with `npm install`, then run `npm run tauri dev`.
 
 Open **Settings → Connections**, choose OpenRouter, OpenAI, Anthropic, or xAI / Grok, paste that provider's API key, and select **Connect**. Saving a key makes its provider active for chat. You can save more than one key and switch providers with **Use for chat**. Explicit model IDs live under **Settings → Advanced**.
 
+A fresh workspace without any connected provider opens a short OpenRouter setup. **Open OpenRouter** launches its [API-key page](https://openrouter.ai/settings/keys) in the system browser. Sign in, add credits if needed, create/copy a key, return to Bench, and select **Connect**. You can set up later or use another provider. Existing connected users keep their normal workspace; **Settings → Connections → OpenRouter → Get an OpenRouter key** reopens the guide. Connecting stores the key without making an inference request or confirming its remote validity; OpenRouter bills subsequent usage directly.
+
 Keys are stored in the system credential store (macOS Keychain on macOS). The password field sends the key once to Rust through Tauri IPC and clears after saving; React does not persist keys or call model APIs. SQLite stores only provider and model preferences. Existing `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and `XAI_API_KEY` launch environment variables also work as fallbacks. Without a key for the selected provider, local conversations still save and the app shows a clear error when sending.
 
 ## Workspaces and local data
