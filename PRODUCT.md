@@ -5,6 +5,7 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 ## Experience
 
 - Begin with a warm off-white dot-grid canvas, floating tool palette, and centered composer. Auto is the default output selection.
+- Choose outputs through a compact neutral list with a selected checkmark; unfinished outputs sit under Coming later and retain requests in placeholder workspaces.
 - Let the workspace emerge from the request. Chat uses a conversation; Website uses a conversation beside a preview. Keep the conversation available during revisions.
 - Organize conversations automatically. Confident matches enter existing projects; uncertain matches enter Miscellaneous. Manual reassignment takes precedence.
 - Use restrained motion, neutral colors, consistent design tokens, generous whitespace, and clean Markdown. Avoid dashboards, suggestions, decorative AI imagery, unnecessary borders, and technical configuration in the primary workflow.
