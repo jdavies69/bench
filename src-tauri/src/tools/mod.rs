@@ -80,6 +80,23 @@ pub fn requires_current_info(query: &str) -> bool {
                 .any(|word| contains_term(&text, word)))
 }
 
+pub fn needs_web_search(query: &str) -> bool {
+    let text = query.to_lowercase();
+    requires_current_info(query)
+        || [
+            "search the web",
+            "search online",
+            "web search",
+            "look up",
+            "look this up",
+            "research online",
+            "find sources",
+            "find online",
+        ]
+        .iter()
+        .any(|term| contains_term(&text, term))
+}
+
 fn contains_term(text: &str, term: &str) -> bool {
     text.match_indices(term).any(|(start, _)| {
         let before = text[..start].chars().next_back();
@@ -101,6 +118,16 @@ mod tests {
         assert!(!requires_current_info("Build a weather app"));
         assert!(!requires_current_info("Deliver the document"));
         assert!(!requires_current_info("Explain how a database index works"));
+    }
+
+    #[test]
+    fn simple_attachment_questions_do_not_enable_search() {
+        assert!(!needs_web_search("what is this"));
+        assert!(!needs_web_search("Summarize my attached document"));
+        assert!(!needs_web_search("Explain this photo"));
+        assert!(needs_web_search("Look up this company"));
+        assert!(needs_web_search("Search the web for that filename"));
+        assert!(needs_web_search("What is today's weather?"));
     }
 
     #[test]

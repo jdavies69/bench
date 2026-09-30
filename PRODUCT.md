@@ -13,7 +13,7 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 
 ## Supported today
 
-- Local streaming Chat with OpenRouter, OpenAI, Anthropic, and xAI API keys.
+- Local streaming Chat defaults to a concise, direct answer. Simple attachment questions do not enable hosted search; current-information and explicit search requests can use it. Legacy OpenAI, Anthropic, and xAI implementations remain available internally; Settings exposes OpenRouter only.
 - Static Website generation and conversational file revisions in isolated local workspaces; script-free preview beside the conversation.
 - Native file attachments through the composer’s + button: PNG/JPEG/WebP images, TXT/Markdown/CSV/JSON text, DOCX, XLSX, and supported text PDFs. Selected files stay local until Send, then persist with the message for retries and reopening.
 - Local projects, conversations, search, and settings. OpenRouter Chat can use hosted web search with the existing OpenRouter key; the tool identity and authorization remain provider-independent.

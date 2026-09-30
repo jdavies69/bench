@@ -32,3 +32,5 @@
 | 2026-09-29 | Keep Website versions immutable and recover the newest validated version if the active pointer is damaged. | A failed generation or filesystem write must not destroy the last usable site. |
 | 2026-09-29 | Allow 240 seconds for Website model requests while keeping Chat at 120 seconds. | A live revision exceeded the Chat timeout; the saved request and prior site remained intact, and the retry completed. |
 | 2026-09-29 | Move BYOK configuration into Advanced when Bench-managed usage is functional. | Most users should not need provider setup, but hiding the only working inference path before managed mode exists would break onboarding. |
+
+| 2026-09-30 | Give Chat concise response instructions and gate hosted search on raw user intent. | A trivial attachment question produced repeated final answers and unnecessary searches; attached content must not enable tools, and direct answers should stop once resolved. |
