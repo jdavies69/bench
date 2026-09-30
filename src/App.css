@@ -107,9 +107,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .composer-add { flex: 0 0 var(--control-large); width: var(--control-large); height: var(--control-large); display: grid; place-items: center; border: 0; border-radius: 50%; background: #f4f4f4; color: #2f3236; }
 .composer textarea { flex: 1; min-width: 80px; max-height: 160px; resize: none; padding: 9px 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 16px; line-height: 24px; overflow-y: auto; }
 .composer textarea::placeholder { color: #a0a4ae; opacity: 1; }
-.output-picker { flex: 0 0 auto; height: 39px; display: flex; align-items: center; gap: var(--space-1); position: relative; padding: 0 11px 0 13px; border: 1px solid #e5e6e8; border-radius: var(--radius-pill); background: white; }
+.output-picker { flex: 0 0 auto; height: 39px; display: flex; align-items: center; gap: var(--space-1); position: relative; padding: 0 11px 0 13px; border: 0; border-radius: var(--radius-pill); background: transparent; }
 .output-picker { color: #26282b; font-size: 14px; }
-.output-picker:hover, .output-picker[aria-expanded="true"] { background: #fafafa; border-color: #d8d9dc; }
+.output-picker:hover, .output-picker[aria-expanded="true"] { background: #fafafa; }
 .output-menu { position: fixed; z-index: 20; width: 232px; overflow-y: auto; padding: 8px; border: 1px solid rgba(40,40,40,.07); border-radius: 16px; background: #fff; box-shadow: 0 14px 38px rgba(36,34,30,.13), 0 3px 9px rgba(36,34,30,.05); scrollbar-width: thin; }
 .output-menu-item { width: 100%; min-height: 32px; display: flex; align-items: center; gap: 12px; padding: 6px 11px; border: 0; border-radius: 9px; background: transparent; color: #303236; font-size: 13px; text-align: left; }
 .output-menu-item[aria-checked="true"] { background: #f1f1f0; }
