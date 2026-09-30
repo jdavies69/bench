@@ -1,12 +1,16 @@
-# Bench v0.0.1
+# Bench
 
 Bench is a free, MIT-licensed open-source desktop AI workspace built with Tauri 2, React, TypeScript, Rust, and SQLite. It supports streaming chat, local search, automatic project grouping, manual project moves, output routing, static Website workspaces, and persistent settings.
+
+## Download (development build)
+
+[Download Bench for Apple Silicon](https://github.com/jdavies69/bench/releases/latest). This free development build is ad-hoc signed and **not Apple-notarized**; macOS may require explicit first-launch approval through Privacy & Security. Do not disable Gatekeeper globally. Tested on macOS 27 Apple Silicon; older macOS and Intel compatibility are unverified. Open the DMG and drag Bench into Applications once. Subsequent releases download inside Bench; Settings offers Restart to update.
 
 ## Run
 
 Install Node dependencies with `npm install`, then run `npm run tauri dev`.
 
-Open **Settings → Connections**, choose OpenRouter, OpenAI, Anthropic, or xAI / Grok, paste that provider's API key, and select **Connect**. Saving a key makes its provider active for chat. You can save more than one key and switch providers with **Use for chat**. Explicit model IDs live under **Settings → Advanced**.
+Open **Settings → Connections → OpenRouter** and choose **Connect OpenRouter**. Manual API-key entry is also available; model settings live under **Settings → Advanced**.
 
 A fresh disconnected workspace offers **Connect OpenRouter**. Bench opens browser sign-in using OAuth PKCE, receives a one-time localhost callback, and stores the connection credential directly in macOS Keychain. No key copy/paste or Bench account is required. Cancel or set up later; **Settings → Connections → OpenRouter → Connect OpenRouter** reopens setup. Manual key entry remains a Settings fallback. Connecting makes no model request; OpenRouter bills subsequent usage directly.
 
@@ -45,11 +49,11 @@ Execution and approval preferences are enforced in Rust for Website creation, re
 
 Streaming can be exercised end to end once a valid provider key is saved. The local test suite covers output intent, project grouping and manual reassignment, stream event parsing, error mapping, website creation and revision using a fake provider, hosted-search request and citation parsing, failed SQLite writes, and reopening the database. Live web search requires a connected OpenRouter key and remains unverified.
 
-CI builds the frontend and runs frontend and beta-checker tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Packaged builds are local development artifacts until Developer ID signing, notarization, and clean-machine installation are verified. See [external Mac beta preparation](docs/macos-beta.md) for the read-only artifact checker and acceptance steps.
+CI builds the frontend and runs frontend and beta-checker tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Public downloads are explicitly labeled development artifacts; Developer ID signing, notarization, and clean-machine installation remain pending for a polished release. See [external Mac beta preparation](docs/macos-beta.md) for the read-only artifact checker and acceptance steps.
 
 ## App updates
 
-Signed updater support verifies the package and its announced version before installation. Settings supports automatic download and an explicit restart to install. The release feed is not configured yet; automatic delivery and an actual in-place upgrade remain pending. The updater signing key is separate from Apple Developer ID signing.
+Signed updater support verifies the package and its announced version before installation. Settings supports automatic download and an explicit restart to install. The development feed is configured at GitHub Releases. Packages and announced versions are verified with Bench’s updater key; publication and native acceptance evidence are tracked in ROADMAP.md. The updater signing key is separate from Apple Developer ID signing.
 
 ## File attachments
 

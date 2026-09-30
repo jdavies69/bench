@@ -1,6 +1,6 @@
 # Public release gates
 
-The selected product is the bare-minimum Apple Silicon BYOK release. Accounts and billing are deferred. Builds remain development artifacts until signing, notarization, and clean-machine acceptance pass. This document describes pending release work; no signing, notarization, purchase, or public distribution is completed by the tooling.
+The selected product is the bare-minimum Apple Silicon BYOK release. Accounts and billing are deferred. The user authorized public development downloads without Apple Developer ID signing or notarization on September 30. These must be labeled development builds with first-install Gatekeeper guidance. Signing, notarization, and clean-machine acceptance remain gates for claiming a polished public release, not for publishing an explicitly identified development download. This document describes pending release work; no signing, notarization, purchase, or public distribution is completed by the tooling.
 
 ## Pending decisions and access
 

@@ -12,6 +12,8 @@
 
 ## Current handoff
 
+- Development download and updater rollout underway: user explicitly authorized web distribution without Apple Developer ID/notarization. Configured GitHub latest feed and installed an enabled 0.0.1 seed locally. Version 0.0.2 aligned across source; installer moved to a blocking worker to keep macOS administrator approval responsive. Full checks pass (130 Rust, 87 frontend, 16 release-tool). Publishing and actual native upgrade acceptance still pending; no paid model calls made.
+
 - Chat response refinement installed September 30: concise default system instructions require one direct answer without repeated conclusions, speculative attachment origins, or unsolicited follow-ups. Hosted search is offered only when the raw user request matches current-information or explicit web-search intent; simple attachment questions use ordinary Chat. 130 Rust tests, Clippy, formatting and signed native build pass; installed bundle matches and opens normally. No paid request was made to verify the new model behavior.
 
 - File attachments are installed and native-verified September 30: composer + opens the Mac chooser, selected filename chips are visibly positioned below the composer, and removal works. User confirmed successful upload. `/Applications/Bench.app` recursively matches the final rebuilt package. Selecting stays local; no paid provider request was made in this attachment cycle.

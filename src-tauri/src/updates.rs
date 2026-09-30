@@ -197,12 +197,24 @@ pub async fn check_app_update(
     app_update_status(app, state, product)
 }
 #[tauri::command]
-pub fn install_app_update(
-    app: AppHandle,
-    state: State<'_, UpdateState>,
-    product: State<'_, crate::commands::AppState>,
-    attachments: State<'_, crate::attachments::AttachmentState>,
-) -> Result<(), String> {
+pub async fn install_app_update(app: AppHandle) -> Result<(), String> {
+    let worker_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || install_pending_update(&worker_app))
+        .await
+        .map_err(|_| {
+            "Could not install the update. Try again; your saved work stays on this Mac."
+                .to_string()
+        })??;
+    app.restart()
+}
+
+// The macOS installer may ask the main thread to show administrator approval.
+// Keep synchronous installation and all mutation gates on a blocking worker;
+// no database, OAuth, operation, attachment or pending lock crosses an await.
+fn install_pending_update(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<UpdateState>();
+    let product = app.state::<crate::commands::AppState>();
+    let attachments = app.state::<crate::attachments::AttachmentState>();
     if state.busy.swap(true, Ordering::AcqRel) {
         return Err("An update is already in progress.".into());
     }
@@ -228,7 +240,7 @@ pub fn install_app_update(
     drop(pending);
     drop(operations);
     drop(connection);
-    app.restart()
+    Ok(())
 }
 
 async fn download_verified(
