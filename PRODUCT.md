@@ -20,7 +20,7 @@ Bench turns an idea into a usable output in a quiet native Mac workspace.
 - Connect OpenRouter through browser sign-in (OAuth PKCE), with automatic return and credential storage in Keychain. Setup can be skipped or reopened from Settings; manual OpenRouter key entry remains available. Settings exposes only OpenRouter; legacy provider credentials remain intact. Connecting does not make a model request.
 - Native OpenRouter usage in Settings: manual refresh shows spend and the connected key’s limit. These figures cover all apps using that key, not an account credit balance.
 - Document and Presentation generation/revision with local editing and export; Image generation/revision and raster export; Voice drafting, audio playback, and export. Application supports bounded local forms/calculators with saved inputs and interactive HTML export. These workflows pass fake-provider tests; paid live generation verification is pending. Agent performs bounded local conversation synthesis through actual read/draft/inspect tool rounds and saves a report only on successful completion. It does not browse, run commands, or access arbitrary files.
-- Signed updater verification and native Settings controls are implemented. Automatic delivery is pending a configured public release feed and an in-place upgrade test.
+- Development downloads and the signed update feed are published on GitHub. Native Check/download/verification/restart upgraded the installed app from 0.0.1 to 0.0.2. Automatic checks are enabled by default and downloads wait for explicit restart; background scheduling itself has not yet been observed across a future release. Public builds are not Apple-notarized; polished release acceptance remains pending.
 
 ## Boundaries
 

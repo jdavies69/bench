@@ -2,7 +2,7 @@
 
 ## Now
 
-- Add signed automatic updates so users do not repeatedly drag/Replace app bundles. Public feed/signing and clean-machine update verification remain release gates.
+- Add signed automatic updates so users do not repeatedly drag/Replace app bundles. Development feed and current-Mac upgrade are verified; clean-machine acceptance and Apple signing/notarization remain polished-release gates.
 - Design optional monthly AI-budget-aware model routing and opt-in real stronger-model comparisons; no paid examples without approval and no Bench account/billing service.
 
 - Prepare the Apple Silicon BYOK release with Connect OpenRouter browser sign-in. Accounts/billing remain deferred. Complete OAuth native verification and signing/notarization/clean-install gates; see `docs/public-release.md`.
@@ -12,7 +12,7 @@
 
 ## Current handoff
 
-- Development download and updater rollout underway: user explicitly authorized web distribution without Apple Developer ID/notarization. Configured GitHub latest feed and installed an enabled 0.0.1 seed locally. Version 0.0.2 aligned across source; installer moved to a blocking worker to keep macOS administrator approval responsive. Full checks pass (130 Rust, 87 frontend, 16 release-tool). Publishing and actual native upgrade acceptance still pending; no paid model calls made.
+- Development downloads and signed update feed are live: https://github.com/jdavies69/bench/releases/tag/v0.0.2. User authorized non-notarized Apple Silicon distribution. Published DMG, updater archive, signature, latest.json and SHA256SUMS from 8465b6c; public feed/archive/DMG match reviewed bytes. Archive is arm64, version 0.0.2, bounded and signature/version verified; DMG integrity passes. Installed feed-enabled 0.0.1 seed, clicked native Check for updates, observed downloaded-and-verified status, then Restart to update. Installed bundle recursively matches released 0.0.2, new process runs, and user confirmed Bench opens normally. Computer Use reports noWindowsAvailable after direct relaunch; that is an inspection limitation, not an observed product failure. Saved database retains 8 conversations, 13 messages and 1 attachment; no credential changes or paid model calls. Background scheduling is implemented/default enabled; acceptance used manual Check through the shared download path. Privileged install, clean-machine Gatekeeper flow, older macOS compatibility and post-upgrade credential secret access remain unverified. Full checks pass (130 Rust, 87 frontend, 16 release-tool); installer now runs on a blocking worker to keep administrator approval responsive.
 
 - Chat response refinement installed September 30: concise default system instructions require one direct answer without repeated conclusions, speculative attachment origins, or unsolicited follow-ups. Hosted search is offered only when the raw user request matches current-information or explicit web-search intent; simple attachment questions use ordinary Chat. 130 Rust tests, Clippy, formatting and signed native build pass; installed bundle matches and opens normally. No paid request was made to verify the new model behavior.
 

@@ -13,7 +13,7 @@ The selected product is the bare-minimum Apple Silicon BYOK release. Accounts an
 | Notarization | No submission performed | Accepted submission, stapled exact artifact, Gatekeeper assessment |
 | Provider access | BYOK selected | Fresh-install connection, authorized Chat/Website calls, recovery, and key access after signed upgrade |
 | Native acceptance | Development reviews only | Final downloaded artifact installed and exercised on clean Apple Silicon Mac |
-| Distribution | No public release | Approved final artifact, checksums, release notes, installation/support instructions |
+| Distribution | Development release 0.0.2 published; public DMG/feed/archive bytes verified and native upgrade passed on current Mac |  Approved final artifact, checksums, release notes, installation/support instructions |
 
 Keep release credentials outside source. Do not change credential ACLs to suppress prompts. The Keychain status query avoids reading passwords on startup; actual model calls still require normal secret access. A signed upgrade must preserve local data and verify access to previously saved keys.
 
