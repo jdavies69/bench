@@ -2,6 +2,7 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Ship BYOK first and defer accounts/billing for the bare-minimum public release. | Latest user choice supersedes the managed-plan release target. Apple Silicon first remains. A future managed plan would use a monthly fixed balance and cost pass-through with roughly 5% markup; final economics are unresolved. |
 | 2026-09-30 | Target Apple Silicon first with a Bench paid plan and included usage for public release. | User-selected release model; supersedes deferring accounts/billing. Price, allowance, backend services, and credentials remain pending. Keep BYOK working until managed access is real. |
 | 2026-09-30 | Remove the Auto trigger outline while retaining the compact list. | User requested the sparse borderless composer control. |
 | 2026-09-30 | Use the user-selected compact output list with neutral line icons, a checkmark, and a Coming later section. | Replace stock menu styling while keeping Bench sparse; preserve existing placeholder behavior and support keyboard navigation and window-aware placement. |

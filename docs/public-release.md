@@ -1,6 +1,6 @@
 # Public release gates
 
-The selected product is Apple Silicon first, with a managed Bench paid plan and included usage. Current BYOK Chat/Website builds remain development artifacts until managed access works. This document describes pending release work; no signing, notarization, credentials, managed service deployment, purchase, or public distribution is completed by the tooling.
+The selected product is the bare-minimum Apple Silicon BYOK release. Accounts and billing are deferred. Builds remain development artifacts until signing, notarization, and clean-machine acceptance pass. This document describes pending release work; no signing, notarization, purchase, or public distribution is completed by the tooling.
 
 ## Pending decisions and access
 
@@ -11,8 +11,7 @@ The selected product is Apple Silicon first, with a managed Bench paid plan and 
 | Minimum macOS | Unselected; Tauri default is not tested support | Compatibility test on selected oldest version, explicit bundle.macOS.minimumSystemVersion |
 | Developer ID | No valid local signing identity observed | Authorized identity/private key available; exact team recorded |
 | Notarization | No submission performed | Accepted submission, stapled exact artifact, Gatekeeper assessment |
-| Managed plan | Selected, implementation/operations pending | Working account access, paid-plan provisioning, server-owned provider credentials, enforced usage cap and failure recovery |
-| Pricing/allowance | Not finalized by packaging work | Approved price, included allowance, accounting unit, cap and refund/renewal behavior |
+| Provider access | BYOK selected | Fresh-install connection, authorized Chat/Website calls, recovery, and key access after signed upgrade |
 | Native acceptance | Development reviews only | Final downloaded artifact installed and exercised on clean Apple Silicon Mac |
 | Distribution | No public release | Approved final artifact, checksums, release notes, installation/support instructions |
 
@@ -48,6 +47,6 @@ node scripts/check-macos-beta.mjs /path/to/Bench.app --architecture arm64 --vers
 
 Replace the uppercase placeholders before running. Do not modify the checked artifact afterward. Verify the final distributed container and its downloaded app, retain checksums and notarization acceptance, and complete the [clean-machine checklist](macos-beta.md#clean-machine-acceptance). Retain evidence separately from credentials and personal user data.
 
-For the managed plan, clean-machine acceptance must additionally show a new user can obtain managed access without a provider API key, see the plan/allowance accurately, and reach a server-enforced cap without unexpected charges. Test failed payment/provisioning, expired/revoked access, reconnect, concurrent requests, and provider failures. Claims about live billing, usage enforcement, or paid model behavior require observed authorized tests. Packaging success cannot stand in for those checks.
+Accounts, managed usage, and Stripe billing are outside this release. Future requirements are recorded separately in the managed-usage documents. Packaging success cannot stand in for authorized live Chat/Website checks.
 
 Final publication remains a separate concrete action after the finished artifact, release notes, pricing/usage terms, and verification evidence are reviewable. Keep unsupported outputs and unverified capabilities out of public claims.

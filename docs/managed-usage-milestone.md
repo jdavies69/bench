@@ -1,6 +1,6 @@
 # Optional accounts and Bench-managed usage
 
-Status: proposed next milestone. No account, subscription, payment, or managed model service is implemented by this document.
+Status: deferred, September 30, 2026. The latest user choice is BYOK first for the bare-minimum Apple Silicon release. A future managed plan would use a monthly fixed balance and cost pass-through with roughly 5% markup; Supabase and Stripe were approved for that future backend, but no Bench-owned accounts exist. Identity, hosted billing, managed desktop access, and live managed provider calls are unavailable. This document does not provision any account or payment service.
 
 ## Chosen product model
 

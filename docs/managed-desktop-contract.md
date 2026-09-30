@@ -1,6 +1,6 @@
 # Managed desktop integration contract
 
-Status: implementation proposal, September 30, 2026. The user selected an Apple Silicon public release with a monthly Bench plan and included usage. Identity provider, service domain, and plan economics remain unresolved. This document does not implement sign-in or authorize payments or model calls.
+Status: deferred proposal, September 30, 2026. The latest user choice is an Apple Silicon BYOK release without accounts/billing. Supabase and Stripe were selected for a possible future monthly cost pass-through plan; no Bench-owned accounts or domain exist and final economics remain unresolved. This document does not implement sign-in or authorize payments or model calls.
 
 ## Smallest real integration
 

@@ -2,7 +2,7 @@
 
 ## Now
 
-- Build the Apple Silicon public release around a Bench paid plan with included usage. Implement/test durable server-side metering first; account/backend selection, plan economics, service credentials, and signing access are pending. See `docs/public-release.md` and `docs/managed-desktop-contract.md`.
+- Prepare the bare-minimum Apple Silicon BYOK public release. Accounts/billing are deferred by the latest user choice; focus on signing, notarization, clean installation, and existing Chat/Website reliability. See `docs/public-release.md`.
 - Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
 - Review the Website output for usability and factual accuracy across more specifically authorized live revisions. The existing saved version and section navigation have been reviewed without paid calls.
 
@@ -22,7 +22,7 @@
 
 - Expand outputs only after Website is excellent.
 - Add service connections when a concrete output flow needs them.
-- Cloud sync and additional integrations remain deferred. Managed account/billing work now belongs to the public-release milestone.
+- Accounts/billing, cloud sync, and additional integrations remain deferred. Keep managed accounting prototypes separate from the shipping desktop release.
 
 ## Completed
 
