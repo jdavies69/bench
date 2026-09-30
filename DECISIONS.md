@@ -2,6 +2,7 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Implement Agent first as bounded native local conversation synthesis, with staged tools and final-only persistence. | Avoid adding a TypeScript/sidecar runtime for the first useful tool loop. Exact Rust approvals, four model rounds, response caps, and a 300-second deadline govern the run; web, shell, arbitrary filesystem and integrations remain unavailable. |
 | 2026-09-30 | Publish this repository as a free open-source project under MIT; use its GitHub Releases for signed updates. | Explicit user authorization supersedes a separate public binary-only repository. User delegated license selection; MIT permits reuse with simple attribution. OpenRouter usage remains user-funded. |
 | 2026-09-30 | Add automatic app updates through signed Tauri updater packages. | User requests replacing repeated DMG drag/Replace. Prepare and test local update flow; public release feed, signatures, and clean-machine install are required before claiming updates live. |
 | 2026-09-30 | Design optional monthly AI-budget-aware routing and opt-in stronger-model comparisons. | User proposal accepted for exploration after current output workflows. Prefer cost-efficient capable models, show real comparison costs, and never spend on undisclosed comparison calls; no Bench account or billing backend. |

@@ -339,7 +339,12 @@ fn require_success(response: &Response) -> Result<(), String> {
         return Ok(());
     }
     match response.status().as_u16() {
+        400 | 422 => Err("OpenRouter rejected this media request. Try a different prompt.".into()),
         401 | 403 => Err("Check your OpenRouter connection.".into()),
+        402 => Err("OpenRouter could not fund this media request. Check your credits or key spending limit.".into()),
+        404 => Err("This media model is currently unavailable on OpenRouter. Try again later.".into()),
+        413 => Err("This media request is too large. Shorten the prompt or start a new conversation.".into()),
+        500..=599 => Err("OpenRouter media generation is temporarily unavailable. Try again later.".into()),
         429 => Err("OpenRouter is rate limiting media requests. Try again later.".into()),
         _ => Err("OpenRouter could not complete media generation.".into()),
     }
@@ -669,6 +674,36 @@ mod tests {
                 vec![],
                 None,
             ),
+            (
+                "402 Payment Required",
+                "application/json",
+                b"test-secret".to_vec(),
+                None,
+            ),
+            (
+                "400 Bad Request",
+                "application/json",
+                b"test-secret".to_vec(),
+                None,
+            ),
+            (
+                "404 Not Found",
+                "application/json",
+                b"test-secret".to_vec(),
+                None,
+            ),
+            (
+                "413 Payload Too Large",
+                "application/json",
+                b"test-secret".to_vec(),
+                None,
+            ),
+            (
+                "502 Bad Gateway",
+                "application/json",
+                b"test-secret".to_vec(),
+                None,
+            ),
             ("200 OK", "text/html", b"test-secret".to_vec(), None),
             ("200 OK", "audio/mpeg", mp3(), Some(AUDIO_LIMIT + 1)),
             ("200 OK", "audio/mpeg", mp3(), Some(1000)),
@@ -681,6 +716,17 @@ mod tests {
             assert!(!error.contains("test-secret"));
             if status.starts_with("302") {
                 assert_eq!(error, "OpenRouter could not complete media generation.");
+            }
+            let expected = match status.split_whitespace().next().unwrap() {
+                "402" => Some("OpenRouter could not fund this media request. Check your credits or key spending limit."),
+                "400" => Some("OpenRouter rejected this media request. Try a different prompt."),
+                "404" => Some("This media model is currently unavailable on OpenRouter. Try again later."),
+                "413" => Some("This media request is too large. Shorten the prompt or start a new conversation."),
+                "502" => Some("OpenRouter media generation is temporarily unavailable. Try again later."),
+                _ => None,
+            };
+            if let Some(expected) = expected {
+                assert_eq!(error, expected);
             }
             task.join().unwrap();
         }

@@ -25,6 +25,7 @@ pub(crate) fn root(app: &AppHandle) -> Result<PathBuf, String> {
 }
 pub(crate) fn kind(conn: &Connection, id: &str) -> Result<ArtifactKind, String> {
     match db::conversation(conn, id)?.output_type.as_str() {
+        "agent" => Ok(ArtifactKind::Agent),
         "application" => Ok(ArtifactKind::Application),
         "document" => Ok(ArtifactKind::Document),
         "presentation" => Ok(ArtifactKind::Presentation),
@@ -35,12 +36,12 @@ pub(crate) fn kind(conn: &Connection, id: &str) -> Result<ArtifactKind, String> 
 }
 pub(crate) fn validate_content(kind: ArtifactKind, content: &Value) -> Result<(), String> {
     match kind {
+        ArtifactKind::Agent => crate::agent::validate(kind, content),
         ArtifactKind::Application => crate::application::validate(kind, content),
         ArtifactKind::Document | ArtifactKind::Presentation => {
             text_outputs::validate(kind, content)
         }
         ArtifactKind::Image | ArtifactKind::Voice => crate::media::validate(kind, content),
-        _ => Err("This output does not support that action.".into()),
     }
 }
 fn text_kind(conn: &Connection, id: &str) -> Result<ArtifactKind, String> {
@@ -239,6 +240,7 @@ pub fn prepare_artifact_action(
     if policy.evaluate(&action) == Decision::Allow {
         return Ok(None);
     }
+    let is_agent = action.binding.operation.starts_with("artifact:agent:");
     let review = state
         .approvals
         .lock()
@@ -253,7 +255,11 @@ pub fn prepare_artifact_action(
         id: review.id,
         conversation_id,
         title,
-        detail: "Your current version and saved request will be kept.".into(),
+        detail: if is_agent {
+            "Up to four model rounds may read this saved conversation, stage and inspect a local report, then save its final version. No web research, shell commands or external changes. This bounds calls, not a dollar cost.".into()
+        } else {
+            "Your current version and saved request will be kept.".into()
+        },
     }))
 }
 #[tauri::command]
@@ -487,6 +493,14 @@ pub async fn export_artifact(
             },
             text_outputs::export_text(&current)?.into_bytes(),
         ),
+        (ArtifactKind::Agent, "text") => (
+            "md".to_owned(),
+            crate::agent::export_text(&current.content)?.into_bytes(),
+        ),
+        (ArtifactKind::Agent, "html") => (
+            "html".to_owned(),
+            crate::agent::export_html(&current.content)?.into_bytes(),
+        ),
         (ArtifactKind::Application, "html") => (
             "html".to_owned(),
             crate::application::export_html(&current.content)?.into_bytes(),
@@ -605,6 +619,53 @@ mod tests {
             text_outputs::validate,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn agent_grant_is_exact_one_use_and_stale_saved_request_is_rejected() {
+        let (mut conn, _, root) = fixture();
+        let task =
+            db::create_user_message(&mut conn, None, "Synthesize this conversation", "agent")
+                .unwrap();
+        let (policy, first) = action(
+            &conn,
+            &root,
+            &task.id,
+            ArtifactKind::Agent,
+            "generate",
+            None,
+            None,
+            crate::agent::validate,
+        )
+        .unwrap();
+        let mut approvals = ApprovalStore::default();
+        assert_eq!(
+            approvals.authorize(&policy, &first, None).unwrap(),
+            Decision::ReviewRequired
+        );
+        let review = approvals.register(first.clone()).unwrap();
+        let token = approvals.approve(&review.id, &first.binding).unwrap();
+        assert_eq!(
+            approvals.authorize(&policy, &first, Some(&token)).unwrap(),
+            Decision::Allow
+        );
+        assert!(approvals.authorize(&policy, &first, Some(&token)).is_err());
+        let review = approvals.register(first.clone()).unwrap();
+        db::create_user_message(&mut conn, Some(&task.id), "Use the updated facts", "agent")
+            .unwrap();
+        let (_, changed) = action(
+            &conn,
+            &root,
+            &task.id,
+            ArtifactKind::Agent,
+            "generate",
+            None,
+            None,
+            crate::agent::validate,
+        )
+        .unwrap();
+        assert_ne!(changed.binding, first.binding);
+        assert!(approvals.approve(&review.id, &changed.binding).is_err());
     }
 
     #[test]

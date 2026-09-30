@@ -1,3 +1,5 @@
+mod agent;
+mod agent_commands;
 mod application;
 mod application_commands;
 mod artifact;
@@ -40,6 +42,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            agent_commands::generate_agent_output,
             application_commands::load_application_values,
             application_commands::save_application_values,
             application_commands::evaluate_application,

@@ -13,7 +13,7 @@ import "./App.css";
 
 type IconName = "mark" | "plus" | "search" | "folder" | "chevron" | "arrow" | "panel" | "close";
 const outputName = (type: OutputType) => type.charAt(0).toUpperCase() + type.slice(1);
-const isArtifact = (type?: OutputType) => ["document", "presentation", "image", "voice", "application"].includes(type ?? "");
+const isArtifact = (type?: OutputType) => ["document", "presentation", "image", "voice", "application", "agent"].includes(type ?? "");
 type PendingReview = { review: ActionReview; operation: "generate" | "restore" | "edit"; targetRevision?: number; artifactKind?: OutputType; content?: TextArtifactContent };
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 function beginWindowDrag(event: React.MouseEvent<HTMLElement>) {
@@ -47,10 +47,39 @@ function Composer({ value, onChange, onSend, busy, outputType, setOutputType, ce
     <button className="send-button" type="submit" disabled={!value.trim() || busy} aria-label="Send message"><Icon name="arrow" size={21} /></button>
   </form>;
 }
+const safeMediaErrors = new Set([
+  "OpenRouter rejected this media request. Try a different prompt.",
+  "OpenRouter could not fund this media request. Check your credits or key spending limit.",
+  "This media model is currently unavailable on OpenRouter. Try again later.",
+  "This media request is too large. Shorten the prompt or start a new conversation.",
+  "OpenRouter media generation is temporarily unavailable. Try again later.",
+  "Select OpenRouter in Settings to create Image and Voice outputs.",
+  "Check your OpenRouter connection.",
+  "OpenRouter is rate limiting media requests. Try again later.",
+  "OpenRouter could not complete media generation.",
+  "Generated media exceeds the size limit.",
+  "Media generation returned an unexpected content type.",
+  "Media generation stopped before finishing.",
+  "Media generation returned an empty result.",
+  "Image generation returned an invalid response.",
+  "Image generation must return exactly one image.",
+  "Image generation returned invalid image bytes.",
+  "Voice generation returned invalid MP3 audio.",
+  "Could not reach image generation.",
+  "Could not reach voice generation.",
+  "The generated voice script is too long.",
+  "Could not create the voice script. Your previous audio is preserved.",
+  "Media request history is too large. Start a new conversation with the current brief.",
+  "Media input must be 1–32768 UTF-8 bytes.",
+  "Choose a supported voice.",
+  "Choose a supported media model.",
+]);
 function responseError(error: unknown): string {
   const raw = errorText(error);
   const message = raw.toLowerCase();
-  if (/rejected the api key|is rate limiting requests|took too long to respond|is temporarily unavailable|stopped before finishing|could not reach|web search isn't connected|web search is unavailable|web search timed out|web search found no usable results|could not process this request|could not complete the request/i.test(raw)) return raw;
+  if (safeMediaErrors.has(raw)) return raw;
+  if (/^(OpenRouter|OpenAI|Anthropic|xAI \/ Grok) (rejected the API key\. Check it in Settings\.|is rate limiting requests\. Retry in a moment\.|took too long to respond\. Retry when ready\.|is temporarily unavailable\. Retry in a moment\.|stopped before finishing\. Retry the response\.|could not process this request\. Check the model in Settings or rephrase\.|could not complete the request\. Retry in a moment\.)$/.test(raw)) return raw;
+  if (/^Could not reach (OpenRouter|OpenAI|Anthropic|xAI \/ Grok)\. Check your connection and retry\.$/.test(raw)) return raw;
   if (message.includes("401") || message.includes("403") || message.includes("invalid api key") || message.includes("unauthorized")) return "Check the provider key in Settings.";
   if (message.includes("429") || message.includes("rate limit")) return "Rate limit reached. Try again shortly.";
   if (message.includes("timeout") || message.includes("timed out")) return "The response timed out.";
@@ -123,7 +152,7 @@ function Sidebar({ snapshot, collapsed, onToggle, expanded, setExpanded, current
 function OutputWorkspace({ conversationId, type, state, revisions, busy, onClose, onRestore, onExport, onEdit }: { conversationId: string; type: OutputType; state: WorkspaceState | null; revisions: WebsiteRevision[]; busy: boolean; onClose: () => void; onRestore: (revision: number) => void; onExport: (format: ArtifactExportFormat) => void; onEdit: (content: TextArtifactContent) => void }) {
   const Module = workspaceModules[type];
   return <section className="output-workspace" aria-label={`${outputName(type)} workspace`}><div className="output-toolbar"><span>{outputName(type)}</span><button className="icon-button" onClick={onClose} aria-label="Close output workspace"><Icon name="close" size={17} /></button></div>
-    {state && state.kind !== "website" && <div className="artifact-history"><details key={state.revision}><summary aria-label="Output versions">Version {state.revision}</summary><div className="version-list">{[...revisions].reverse().map((item) => <button key={item.revision} type="button" disabled={busy || item.current} onClick={() => onRestore(item.revision)}>{item.current ? `Version ${item.revision} · Current` : `Restore version ${item.revision}`}</button>)}</div></details>{(state.kind === "document" || state.kind === "presentation") && <button type="button" disabled={busy} onClick={() => onExport("html")}>Export HTML</button>}</div>}
+    {state && state.kind !== "website" && <div className="artifact-history"><details key={state.revision}><summary aria-label="Output versions">Version {state.revision}</summary><div className="version-list">{[...revisions].reverse().map((item) => <button key={item.revision} type="button" disabled={busy || item.current} onClick={() => onRestore(item.revision)}>{item.current ? `Version ${item.revision} · Current` : `Restore version ${item.revision}`}</button>)}</div></details>{(state.kind === "document" || state.kind === "presentation" || state.kind === "agent") && <button type="button" disabled={busy} onClick={() => onExport("html")}>Export HTML</button>}</div>}
     {Module && state && state.kind === type ? <Module conversationId={conversationId} state={state} revisions={revisions} busy={busy} onRestore={onRestore} onExport={onExport} onEdit={onEdit} /> : <div className="output-empty"><span>{busy ? `Creating ${outputName(type).toLowerCase()}…` : `${outputName(type)} workspace`}</span>{!busy && !Module && <small>This output is not available yet.</small>}{!busy && Module && <small>Your saved request is ready to continue.</small>}</div>}
   </section>;
 }
@@ -220,6 +249,7 @@ function App() {
   const executeArtifact = async (conversationId: string, kind: OutputType, operation: "generate" | "restore" | "edit", targetRevision?: number, content?: TextArtifactContent, token?: string) => {
     const result = operation === "restore" && targetRevision !== undefined ? await native.restoreArtifact(conversationId, targetRevision, token)
       : operation === "edit" && content ? await native.saveArtifactEdits(conversationId, content, token)
+      : kind === "agent" ? await native.generateAgentOutput(conversationId, token)
       : kind === "image" || kind === "voice" ? await native.generateMediaOutput(conversationId, token) : await native.generateArtifact(conversationId, token);
     if (selectedRef.current === conversationId) setArtifact(result);
     try { const history = await native.artifactRevisions(conversationId); if (selectedRef.current === conversationId) setRevisions(history); }

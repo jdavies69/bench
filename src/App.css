@@ -319,3 +319,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .application-results > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .application-results dt { font-size: 12px; color: var(--muted); }
 .application-results dd { margin: 0; font-size: 20px; font-variant-numeric: tabular-nums; }
+.agent-reader { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.agent-steps { margin: 0 24px 12px; font-size: 11px; color: var(--muted); }
+.agent-steps summary { cursor: pointer; }
+.agent-steps ol { padding-left: 18px; }
+.agent-steps li { padding: 6px 0; }
+.agent-steps li > span { color: var(--ink); }
+.agent-steps li > p { margin: 4px 0; line-height: 1.5; }
+.agent-reader .doc-paper { flex: initial; overflow-y: visible; }

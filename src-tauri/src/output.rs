@@ -55,7 +55,7 @@ impl OutputType {
             Self::Presentation => ("Presentation", Implementation::Artifact),
             Self::Document => ("Document", Implementation::Artifact),
             Self::Image => ("Image", Implementation::Artifact),
-            Self::Agent => ("Agent", Implementation::Deferred),
+            Self::Agent => ("Agent", Implementation::Artifact),
             Self::Voice => ("Voice", Implementation::Artifact),
         };
         OutputDefinition {

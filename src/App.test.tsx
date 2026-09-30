@@ -7,7 +7,7 @@ import App from "./App";
 const nativeMock = vi.hoisted(() => ({
   snapshot: vi.fn(), messages: vi.fn(), toolActivity: vi.fn(), createMessage: vi.fn(), stream: vi.fn(), loadWebsite: vi.fn(),
   websiteRevisions: vi.fn(), generateWebsite: vi.fn(), restoreWebsite: vi.fn(), prepareWebsiteAction: vi.fn(), approveAction: vi.fn(),
-  configureWebSearch: vi.fn(), loadArtifact: vi.fn(), generateArtifact: vi.fn(), generateMediaOutput: vi.fn(), artifactRevisions: vi.fn(), restoreArtifact: vi.fn(), prepareArtifactAction: vi.fn(), exportArtifact: vi.fn(), saveArtifactEdits: vi.fn(),
+  configureWebSearch: vi.fn(), loadArtifact: vi.fn(), generateArtifact: vi.fn(), generateMediaOutput: vi.fn(), generateAgentOutput: vi.fn(), artifactRevisions: vi.fn(), restoreArtifact: vi.fn(), prepareArtifactAction: vi.fn(), exportArtifact: vi.fn(), saveArtifactEdits: vi.fn(),
   saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(), connectOpenRouter: vi.fn(), cancelOpenRouterConnect: vi.fn(),
   openOpenRouterUsage: vi.fn(), openOpenRouterBilling: vi.fn(),
   openRouterUsage: vi.fn(),
@@ -307,4 +307,37 @@ describe("Artifact workflows", () => {
     await waitFor(() => expect(nativeMock.restoreArtifact).toHaveBeenCalledWith(created.id, 1, undefined));
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy(); expect(screen.getByRole("heading", { name: "Local brief" })).toBeTruthy();
   });
+});
+
+it("requires exact approval before Agent tools and loads the committed local report", async () => {
+  const created = { ...conversation, id: "agent-1", title: "Synthesize a report", outputType: "agent", outputSelection: "agent" };
+  const artifact = { ...documentArtifact, kind: "agent", content: { ...documentArtifact.content, steps: [{ tool: "read_conversation", summary: "Read saved content" }, { tool: "draft_report", summary: "Drafted local report" }] } };
+  nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); return created; });
+  nativeMock.prepareArtifactAction.mockResolvedValue({ id: "agent-review", conversationId: created.id, title: "Run local synthesis?", detail: "Read saved messages and write a local report." });
+  nativeMock.generateAgentOutput.mockResolvedValue(artifact);
+  const user = userEvent.setup(); render(<App />); await screen.findByRole("button", { name: "Output type: Auto" });
+  await user.type(screen.getByRole("textbox", { name: "Message" }), "Synthesize a report"); await user.click(screen.getByRole("button", { name: "Send message" })); await screen.findByText("Run local synthesis?");
+  expect(nativeMock.generateAgentOutput).not.toHaveBeenCalled(); await user.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(nativeMock.generateAgentOutput).toHaveBeenCalledWith(created.id, "one-use-grant")); await screen.findByRole("heading", { name: "Local brief" });
+  await user.click(screen.getByRole("button", { name: "Export report" })); await waitFor(() => expect(nativeMock.exportArtifact).toHaveBeenCalledWith(created.id, "text"));
+});
+
+it.each([
+  "OpenRouter could not fund this media request. Check your credits or key spending limit.",
+  "This media request is too large. Shorten the prompt or start a new conversation.",
+  "OpenRouter rejected this media request. Try a different prompt.",
+  "This media model is currently unavailable on OpenRouter. Try again later.",
+  "OpenRouter media generation is temporarily unavailable. Try again later.",
+  "Generated media exceeds the size limit.",
+])("preserves the safe media recovery reason: %s", async (reason) => {
+  const created = { ...conversation, id: "image-1", title: "A beach day in nyc", outputType: "image", outputSelection: "image" };
+  nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); nativeMock.messages.mockResolvedValue([{ ...userMessage, content: created.title }]); nativeMock.generateMediaOutput.mockRejectedValue(new Error(reason));
+  const user = userEvent.setup(); render(<App />); await user.click(await screen.findByRole("button", { name: created.title })); await user.click(await screen.findByRole("button", { name: "Retry" }));
+  await screen.findByText(reason); expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy(); expect(nativeMock.createMessage).not.toHaveBeenCalled();
+});
+it("does not expose provider details appended to a known media error", async () => {
+  const created = { ...conversation, outputType: "image", title: "Saved image request" };
+  nativeMock.snapshot.mockResolvedValue({ ...snapshot, conversations: [created] }); nativeMock.generateMediaOutput.mockRejectedValue(new Error("Could not reach image generation. secret-provider-token"));
+  const user = userEvent.setup(); render(<App />); await user.click(await screen.findByRole("button", { name: created.title })); await user.click(await screen.findByRole("button", { name: "Retry" }));
+  await screen.findByText("Couldn’t complete the response."); expect(screen.queryByText(/secret-provider-token/)).toBeNull();
 });

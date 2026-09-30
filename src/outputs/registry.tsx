@@ -3,6 +3,7 @@ import type { ArtifactExportFormat, OutputType, TextArtifactContent, WebsiteRevi
 import { WebsiteWorkspace } from "./WebsiteWorkspace";
 import { DocumentWorkspace } from "./DocumentWorkspace";
 import { PresentationWorkspace } from "./PresentationWorkspace";
+import { AgentWorkspace } from "./AgentWorkspace";
 import { ApplicationWorkspace } from "./ApplicationWorkspace";
 import { MediaWorkspace } from "./MediaWorkspace";
 export interface OutputWorkspaceProps {
@@ -10,6 +11,7 @@ export interface OutputWorkspaceProps {
   onExport: (format: ArtifactExportFormat) => void; onEdit: (content: TextArtifactContent) => void;
 }
 export const workspaceModules: Partial<Record<OutputType, ComponentType<OutputWorkspaceProps>>> = {
+  agent: ({ state, busy, onExport }) => state.kind === "agent" ? <AgentWorkspace state={state} busy={busy} onExport={() => onExport("text")} /> : null,
   application: ({ state, conversationId, busy, onExport }) => state.kind === "application" ? <ApplicationWorkspace key={`${conversationId}:${state.revision}`} conversationId={conversationId} state={state} busy={busy} onExport={() => onExport("html")} /> : null,
   website: ({ state, ...props }) => state.kind === "website" ? <WebsiteWorkspace state={state} {...props} /> : null,
   document: ({ state, busy, onExport, onEdit }) => state.kind === "document" ? <DocumentWorkspace state={state} busy={busy} onExport={() => onExport("text")} onEdit={onEdit} /> : null,

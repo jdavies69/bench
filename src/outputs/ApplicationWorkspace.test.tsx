@@ -32,3 +32,6 @@ it("rejects blank numeric values, undefined math, oversized arithmetic, and expr
   expect(() => evaluateApplication({ op: "multiply", left: { op: "constant", value: 1e12 }, right: { op: "constant", value: 2 } }, {})).toThrow();
   expect(() => evaluateApplication({ op: "constant", value: 1 }, {}, 13)).toThrow();
 });
+it.each([ ["add", 9], ["subtract", 5], ["multiply", 14], ["divide", 3.5], ["min", 2], ["max", 7] ] as const)("matches the fixed native interpreter for %s", (op, expected) => {
+  expect(evaluateApplication({ op, left: { op: "input", id: "left" }, right: { op: "input", id: "right" } }, { left: 7, right: 2 })).toBe(expected);
+});

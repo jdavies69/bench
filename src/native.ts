@@ -31,6 +31,7 @@ export type ArtifactState = ArtifactBase & (
   { kind: "document"; content: { title: string; markdown: string } } |
   { kind: "presentation"; content: { title: string; slides: { title: string; body: string; notes: string }[] } } |
   { kind: "application"; content: ApplicationContent } |
+  { kind: "agent"; content: { title: string; markdown: string; steps: { tool: "read_conversation" | "draft_report" | "inspect_draft"; summary: string }[] } } |
   { kind: "image" | "voice"; content: MediaContent }
 );
 export type WorkspaceState = (WebsiteState & { kind: "website" }) | ArtifactState;
@@ -70,6 +71,7 @@ export const native = {
   saveApplicationValues: (conversationId: string, revision: number, values: ApplicationValues) => invoke<ApplicationValues>("save_application_values", { conversationId, revision, values }),
   loadArtifact: (conversationId: string) => invoke<ArtifactState | null>("load_artifact", { conversationId }),
   generateArtifact: (conversationId: string, approvalToken?: string) => invoke<ArtifactState>("generate_artifact", { conversationId, approvalToken }),
+  generateAgentOutput: (conversationId: string, approvalToken?: string) => invoke<ArtifactState>("generate_agent_output", { conversationId, approvalToken }),
   generateMediaOutput: (conversationId: string, approvalToken?: string) => invoke<ArtifactState>("generate_media_output", { conversationId, approvalToken }),
   artifactRevisions: (conversationId: string) => invoke<WebsiteRevision[]>("list_artifact_revisions", { conversationId }),
   restoreArtifact: (conversationId: string, revision: number, approvalToken?: string) => invoke<ArtifactState>("restore_artifact_revision", { conversationId, revision, approvalToken }),
