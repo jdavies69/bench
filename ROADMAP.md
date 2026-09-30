@@ -3,18 +3,18 @@
 ## Now
 
 - Live-verify OpenRouter's hosted web-search stream and citations after a specific paid-call authorization.
-- Visually review the **current installed build** in Computer Use: blank chat, active conversation, expanded/collapsed sidebar, and Settings. The previous visual check reached an older installed build and must not count as verification of the current UI.
-- Review the Website output for usability and factual accuracy across more live revisions.
+- Review the Website output for usability and factual accuracy across more specifically authorized live revisions. The existing saved version and section navigation have been reviewed without paid calls.
 
 ## Current handoff
 
-- The installed app was built from code commit `adb2334`, whose GitHub CI passed. That source was rebuilt on September 30 and installed at `/Applications/Bench.app`; its bundle matches `src-tauri/target/release/bundle/macos/Bench.app`. The previous installation is temporarily backed up at `/private/tmp/Bench-prior-20260930.app`. Later documentation-only commits do not change the app build.
-- Computer Use connected to the older app on September 30, then lost its native connection. Its helper logged repeated `Sender process is not authenticated` errors. Restarting the helper and connector did not restore visual access in that session. After reopening ChatGPT, retry Computer Use against `/Applications/Bench.app` before drawing UI conclusions. Bench itself launched as a process; the updated window was **not** visually verified.
+- The installed app contains code commit `4acea12`, packaged and installed on September 30 at `/Applications/Bench.app`; a recursive comparison confirms it matches `src-tauri/target/release/bundle/macos/Bench.app`. Subsequent beta-checker and documentation commits do not change the app code. The earlier installation remains backed up at `/private/tmp/Bench-prior-20260930.app`.
+- Computer Use worked this session. Blank chat, a saved active conversation, expanded/collapsed sidebar, Settings, and saved Website version 3 were visually reviewed. Website Services navigation stayed at `about:srcdoc#services`, scrolled, and visibly rendered the destination. No live generation/revision was run.
+- Fixed repeated startup Keychain authentication: macOS connection status now queries attributes without reading secret data. The updated app launched twice and Settings showed OpenRouter Connected without authentication. Actual model use still reads the protected credential and has not been exercised after this rebuild. Ad-hoc signatures can prompt on first secret use after updates; `security find-identity -v -p codesigning` found no valid signing identities. Stable signing remains a release prerequisite.
 - A live OpenRouter web-search test has **not** been authorized or run. The earlier approval to run one live Website test does not cover search. Ask for specific authorization before a paid model/search request, then check citations and failure handling in the installed build.
 
 ## Next
 
-- Prepare an external Mac beta: signing, notarization, clean-machine installation, and onboarding.
+- Prepare an external Mac beta: choose signing owner, obtain authorized credentials, select/test the minimum macOS version and architecture, then notarize and verify clean-machine installation and onboarding. See `docs/macos-beta.md` and `scripts/check-macos-beta.mjs`. Current artifact checks correctly fail Developer ID, signature sealing, hardened runtime, Gatekeeper, and stapled-ticket requirements; no external beta was distributed.
 
 ## Later
 
@@ -37,4 +37,7 @@
 - OpenRouter-hosted web search uses the existing key, with capped tool calls, source checks for current answers, and preserved legacy credentials. Mock tests pass; live behavior awaits verification.
 - Realistic project and Auto output intent regressions cover explicit artifacts, informational questions, ambiguous projects, and weak new-folder signals.
 - Private GitHub repository and macOS CI workflow created.
-- 12 frontend and 57 Rust tests, frontend build, formatting, Clippy, packaged app build, and GitHub CI passed for `adb2334`. External distribution remains unsigned/unnotarized.
+- Website previews retain safe same-page section links; explicit `about:srcdoc` binding prevents navigation to Bench's inherited base URL. Output entry motion no longer starts invisible, so paused WebKit animations cannot hide the panel.
+- Case-insensitive Website filename collisions are rejected before save; regression tests verify last-good preservation, history, and restart-safe capitalization renames.
+- A read-only Mac beta checker and clean-machine acceptance guide are in place; `npm test` includes its fixture tests.
+- 13 frontend, 5 beta-checker, and 60 Rust tests, frontend build, formatting, Clippy, and packaged app build passed for this milestone. GitHub CI status should be checked for the pushed HEAD. External distribution remains unsigned/unnotarized.

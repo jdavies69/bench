@@ -12,11 +12,15 @@ Keys are stored in the system credential store (macOS Keychain on macOS). The pa
 
 ## Workspaces and local data
 
+On macOS, startup and connection status inspect Keychain metadata without reading API-key passwords. Protected password access happens when a model request actually needs the key. Ad-hoc development rebuilds can still trigger approval on that first use because their signing identity changes; stable signing is required for dependable upgrades. Keys and their access controls remain in Keychain.
+
 SQLite lives in Tauri's app data directory under the `app.bench.desktop` identifier. Projects, conversations, messages, output intent, sidebar preference, tool metadata, and settings stay on the device. Bench assigns a project when a conversation clearly names one, and can update an uncertain assignment as more context arrives. Uncertain or ambiguous conversations go to Miscellaneous. A manual project move stays fixed.
 
 `Auto` classifies a new request. Chat works end to end. Website creates and revises static `index.html`, `style.css`, and optional additional HTML pages in a per-conversation app-data workspace. The preview runs in a sandboxed iframe with scripts blocked; Bench does not run generated commands. Application, Presentation, Document, Image, Agent, and Voice currently open clear placeholder workspaces. The conversation stays available beside an output workspace, which can be closed and reopened.
 
 Generated Website revisions are stored under `website-workspaces/<conversation-id>/revision-<number>`. Bench activates a revision only after its files are written and validated. Revisions patch the existing files, preserve previous versions, and keep the last usable preview on a failed generation. The Website workspace's **Versions** control lets you restore a saved version. Generated filenames are restricted to top-level HTML files and `style.css`; active HTML content is rejected.
+
+The isolated preview supports links to sections on the same page; scripts, external navigation, and network resources remain blocked. Filenames that differ only by capitalization are rejected before saving to protect revisions on case-insensitive Mac filesystems.
 
 Generated copy is a draft. Bench asks the model to leave unknown business details as placeholders; verify all claims before publishing. The first live Laundros test was corrected locally to replace invented contact details, hours, and prices without another model call.
 
@@ -37,4 +41,4 @@ Execution and approval preferences are enforced in Rust for Website creation, re
 
 Streaming can be exercised end to end once a valid provider key is saved. The local test suite covers output intent, project grouping and manual reassignment, stream event parsing, error mapping, website creation and revision using a fake provider, hosted-search request and citation parsing, failed SQLite writes, and reopening the database. Live web search requires a connected OpenRouter key and remains unverified.
 
-CI builds the frontend and runs frontend tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Packaged builds are local development artifacts until Developer ID signing, notarization, and clean-machine installation are verified.
+CI builds the frontend and runs frontend and beta-checker tests, Rust formatting, Clippy, and tests on macOS. No API credentials are needed. Read `PRODUCT.md`, `ROADMAP.md`, `DECISIONS.md`, and `AGENTS.md` before development. Packaged builds are local development artifacts until Developer ID signing, notarization, and clean-machine installation are verified. See [external Mac beta preparation](docs/macos-beta.md) for the read-only artifact checker and acceptance steps.

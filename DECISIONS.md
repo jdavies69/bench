@@ -2,6 +2,9 @@
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
+| 2026-09-30 | Inspect macOS Keychain metadata for connection status; read secret data only when using the provider. | Opening Bench or refreshing Settings should not request password access. Keep credentials and their access controls intact; stable signing remains necessary across app updates. |
+| 2026-09-30 | Permit only same-page section navigation in Website previews, explicitly bound to `about:srcdoc`. | Bare fragments inherit the application base URL and leave the preview; external destinations, scripts, and network access remain blocked. |
+| 2026-09-30 | Reject Website filenames that differ only by capitalization before saving. | Default Mac filesystems can otherwise overwrite distinct generated pages and corrupt immutable revisions. |
 | 2026-09-29 | Use Tauri 2, React/TypeScript, Rust, SQLite, and macOS Keychain. | Keep a native local workspace and credentials outside persisted frontend data. |
 | 2026-09-29 | Separate model providers, tools, output modules, and action policy. | Adding one provider or output must not couple every integration to it. |
 | 2026-09-29 | Default to Auto; implement Chat and static Website first. | Prove usable output before expanding breadth. Other outputs remain explicit placeholders. |
