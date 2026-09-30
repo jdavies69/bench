@@ -8,7 +8,7 @@
 
 ## Current handoff
 
-- `main` is at `adb2334` and was clean at the last check. GitHub CI passed for that commit. The same source was rebuilt on September 30 and installed at `/Applications/Bench.app`; its bundle matches `src-tauri/target/release/bundle/macos/Bench.app`. The previous installation is temporarily backed up at `/private/tmp/Bench-prior-20260930.app`.
+- The installed app was built from code commit `adb2334`, whose GitHub CI passed. That source was rebuilt on September 30 and installed at `/Applications/Bench.app`; its bundle matches `src-tauri/target/release/bundle/macos/Bench.app`. The previous installation is temporarily backed up at `/private/tmp/Bench-prior-20260930.app`. Later documentation-only commits do not change the app build.
 - Computer Use connected to the older app on September 30, then lost its native connection. Its helper logged repeated `Sender process is not authenticated` errors. Restarting the helper and connector did not restore visual access in that session. After reopening ChatGPT, retry Computer Use against `/Applications/Bench.app` before drawing UI conclusions. Bench itself launched as a process; the updated window was **not** visually verified.
 - A live OpenRouter web-search test has **not** been authorized or run. The earlier approval to run one live Website test does not cover search. Ask for specific authorization before a paid model/search request, then check citations and failure handling in the installed build.
 
