@@ -32,6 +32,14 @@ The isolated preview supports links to sections on the same page; scripts, exter
 
 Generated copy is a draft. Bench asks the model to leave unknown business details as placeholders; verify all claims before publishing. The first live Laundros test was corrected locally to replace invented contact details, hours, and prices without another model call.
 
+## Project scope
+
+Expand a project you created in the sidebar and choose **Scope**. Set one sentence describing the finished project, then add items yourself or choose **Draft a list from the outcome** (one model request; nothing joins the list until you accept it). The page shows overall and per-area progress, how many items were added and finished in the last seven days, and a **Changed** list.
+
+**Start** on an open item opens a new conversation with a ready-to-send request built locally from the item, the outcome, finished work, and parked items. Sending it files the conversation in that project and marks the item in progress.
+
+After each completed response in a project with a scope, Bench makes one bounded request to your connected model to compare the new activity with the list. The result is only ever a suggestion: missing work, a new idea, an item that looks done, or an item that may no longer be needed. Nothing on the list or the progress bar changes until you answer. No request is made when nothing changed, when **Keep this updated** is off, or while twelve suggestions are waiting. Scope covers work inside Bench; it does not read code repositories, Git, or issue trackers. Miscellaneous has no scope.
+
 ## Web search
 
 With OpenRouter selected, Bench offers OpenRouter's hosted `openrouter:web_search` tool to Chat using the existing OpenRouter key. The model can search when it needs current information. Bench caps server-tool calls, records search activity with the saved user message, and requires a valid source citation before saving an answer to a clearly current-information request. **Settings → Advanced → Web search** can turn it off. With another model provider selected, Bench cannot verify current facts through this tool and asks you to select OpenRouter for such requests. The generic tool identity and authorization remain separate from the model-provider implementation.

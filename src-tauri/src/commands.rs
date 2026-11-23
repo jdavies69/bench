@@ -135,6 +135,7 @@ pub fn load_snapshot(state: State<'_, AppState>) -> Result<db::Snapshot, String>
         providers,
         web_search_key_source: key_store::web_search_key_source()?.into(),
         web_search_status: web_search_status.into(),
+        scopes: crate::scope::summaries(&conn)?,
     })
 }
 
@@ -367,6 +368,7 @@ pub fn create_user_message(
     content: String,
     output_type: String,
     attachment_ids: Option<Vec<String>>,
+    scope_item_id: Option<String>,
 ) -> Result<db::Conversation, String> {
     let active = state
         .active_operations
@@ -380,12 +382,13 @@ pub fn create_user_message(
         return Err("Wait for this response to finish. Your draft is still here.".into());
     }
     crate::attachments::with_staged(&attachments, &attachment_ids.unwrap_or_default(), |files| {
-        db::create_user_message_with_attachments(
+        db::create_user_message_for(
             &mut *database(&state)?,
             conversation_id.as_deref(),
             &content,
             &output_type,
             files,
+            scope_item_id.as_deref(),
         )
     })
 }

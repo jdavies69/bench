@@ -76,6 +76,7 @@ pub struct Snapshot {
     pub providers: Vec<crate::provider::ProviderStatus>,
     pub web_search_key_source: String,
     pub web_search_status: String,
+    pub scopes: Vec<crate::scope::ScopeSummary>,
 }
 
 pub fn open(path: &Path) -> Result<Connection, String> {
@@ -169,6 +170,7 @@ pub fn initialize(conn: &Connection) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
     crate::attachments::initialize(conn)?;
+    crate::scope::initialize(conn)?;
     Ok(())
 }
 
@@ -324,12 +326,34 @@ pub fn create_user_message(
     create_user_message_with_attachments(conn, conversation_id, content, output_type, &[])
 }
 
+#[cfg(test)]
 pub fn create_user_message_with_attachments(
     conn: &mut Connection,
     conversation_id: Option<&str>,
     content: &str,
     output_type: &str,
     attachments: &[crate::attachments::StagedAttachment],
+) -> Result<Conversation, String> {
+    create_user_message_for(
+        conn,
+        conversation_id,
+        content,
+        output_type,
+        attachments,
+        None,
+    )
+}
+
+/// Saves a request. With `scope_item_id`, the new conversation is a work
+/// session for that scope item: it is filed in the item's project and linked
+/// to the item in the same transaction as the message.
+pub fn create_user_message_for(
+    conn: &mut Connection,
+    conversation_id: Option<&str>,
+    content: &str,
+    output_type: &str,
+    attachments: &[crate::attachments::StagedAttachment],
+    scope_item_id: Option<&str>,
 ) -> Result<Conversation, String> {
     let content = content.trim();
     if content.is_empty() {
@@ -338,8 +362,17 @@ pub fn create_user_message_with_attachments(
     if content.chars().count() > 20_000 {
         return Err("Message is too long (20,000 character limit).".into());
     }
+    if scope_item_id.is_some() && conversation_id.is_some() {
+        return Err("Start a new conversation for this item.".into());
+    }
     let selection = output::OutputType::parse_selection(output_type)?;
-    let effective = selection.unwrap_or_else(|| output::OutputType::infer(content));
+    // A session request carries project context below its first line; only
+    // the item itself decides which output Auto selects.
+    let routed = match scope_item_id {
+        Some(_) => content.lines().next().unwrap_or(content),
+        None => content,
+    };
+    let effective = selection.unwrap_or_else(|| output::OutputType::infer(routed));
     let tx = conn.transaction().map_err(|e| e.to_string())?;
     let id = if let Some(id) = conversation_id {
         let existing: Option<(String, bool, String)> = tx
@@ -385,7 +418,10 @@ pub fn create_user_message_with_attachments(
         id.to_owned()
     } else {
         let id = Uuid::new_v4().to_string();
-        let project = crate::grouping::classify(&tx, content)?;
+        let project = match scope_item_id {
+            Some(item_id) => crate::scope::session_project(&tx, item_id)?,
+            None => crate::grouping::classify(&tx, content)?,
+        };
         let title = content
             .lines()
             .next()
@@ -394,10 +430,13 @@ pub fn create_user_message_with_attachments(
             .take(54)
             .collect::<String>();
         tx.execute(
-            "INSERT INTO conversations(id, project_id, title, output_type, output_selection) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![id, project, title, effective.as_str(), output_type],
+            "INSERT INTO conversations(id, project_id, title, output_type, output_selection, project_manually_assigned) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, project, title, effective.as_str(), output_type, scope_item_id.is_some() as i64],
         )
         .map_err(|e| e.to_string())?;
+        if let Some(item_id) = scope_item_id {
+            crate::scope::link_session(&tx, item_id, &id)?;
+        }
         id
     };
     let message_id = Uuid::new_v4().to_string();

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -12,6 +12,7 @@ const nativeMock = vi.hoisted(() => ({
   saveProviderKey: vi.fn(), openOpenRouterSetup: vi.fn(), connectOpenRouter: vi.fn(), cancelOpenRouterConnect: vi.fn(),
   openOpenRouterUsage: vi.fn(), openOpenRouterBilling: vi.fn(),
   openRouterUsage: vi.fn(),
+  loadScope: vi.fn(), setScopeOutcome: vi.fn(), setScopeAutoUpdate: vi.fn(), addScopeItem: vi.fn(), updateScopeItem: vi.fn(), resolveScopeChange: vi.fn(), scopeSessionPrompt: vi.fn(), reconcileScope: vi.fn(),
 }));
 vi.mock("./native", () => ({ native: nativeMock }));
 
@@ -21,7 +22,7 @@ const site = { pages: [{ path: "index.html", html: "<h1>Local site</h1>" }], css
 const snapshot = {
   outputs: [{ id: "chat", label: "Chat", implemented: true, workspace: "conversation" }, { id: "website", label: "Website", implemented: true, workspace: "canvas" }],
   projects: [{ id: "miscellaneous", name: "Miscellaneous", isSystem: true }], conversations: [],
-  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [{ id: "openrouter", label: "OpenRouter", model: "test-model", keySource: "keychain" }], webSearchKeySource: "none", webSearchStatus: "unavailable",
+  settings: { executionBehavior: "discuss", approvalBehavior: "always", modelProvider: "openrouter", sidebarCollapsed: false, webSearchBackend: "auto", webSearchUrl: "" }, providers: [{ id: "openrouter", label: "OpenRouter", model: "test-model", keySource: "keychain" }], webSearchKeySource: "none", webSearchStatus: "unavailable", scopes: [],
 };
 
 beforeEach(() => {
@@ -387,4 +388,117 @@ it("cleans abandoned attachment staging after a delayed message save fails", asy
   await user.click(screen.getByRole("button", { name: "Add files" })); await screen.findByRole("button", { name: "Remove brief.pdf" }); await user.type(screen.getByRole("textbox", { name: "Message" }), "Old brief"); await user.click(screen.getByRole("button", { name: "Send message" }));
   await user.click(screen.getByRole("button", { name: "New chat" })); await user.type(screen.getByRole("textbox", { name: "Message" }), "Fresh draft"); expect(nativeMock.removeStagedAttachment).not.toHaveBeenCalled();
   await act(async () => fail(new Error("database rejected"))); expect(nativeMock.removeStagedAttachment).toHaveBeenCalledWith(file.id); expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("Fresh draft");
+});
+
+describe("Project scope", () => {
+  const laundros = { id: "project-1", name: "Laundros", isSystem: false };
+  const scoped = { ...snapshot, projects: [...snapshot.projects, laundros], scopes: [{ projectId: "project-1", done: 1, total: 3, pending: 2 }] };
+  const scopeItem = { id: "item-1", title: "Write pricing copy", doneWhen: "", area: "", status: "todo", bucket: "scope", origin: "user", sessions: [] };
+  const scopeState = {
+    projectId: "project-1", outcome: "Launch a booking site", autoUpdate: true, lastRunAt: "2026-11-23 10:00:00", lastRunStatus: "ok", stale: false,
+    progress: { inScope: 3, done: 1, doing: 0, later: 0, dropped: 0, percent: 33, addedWeek: 3, doneWeek: 1, areas: [] }, items: [scopeItem], changes: [],
+  };
+  const prompt = "Write pricing copy\n\nProject outcome: Launch a booking site";
+  const session = { id: "chat-1", projectId: "project-1", title: "Write pricing copy", outputType: "chat", outputSelection: "auto", updatedAt: "today" };
+  const openScope = async (user: ReturnType<typeof userEvent.setup>) => {
+    const row = await screen.findByRole("button", { name: "Laundros" });
+    if (row.getAttribute("aria-expanded") !== "true") await user.click(row);
+    await user.click(screen.getByRole("button", { name: "Laundros scope" }));
+    return screen.findByRole("region", { name: "Laundros scope" });
+  };
+  beforeEach(() => {
+    nativeMock.snapshot.mockResolvedValue(scoped);
+    nativeMock.loadScope.mockResolvedValue(scopeState);
+    nativeMock.scopeSessionPrompt.mockResolvedValue(prompt);
+    nativeMock.reconcileScope.mockResolvedValue(scopeState);
+    nativeMock.stream.mockResolvedValue(undefined);
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...scoped, conversations: [session] }); return session; });
+  });
+
+  it("keeps scope off the opening canvas and offers it per project with a quiet count", async () => {
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Laundros scope" })).toBeNull();
+    // Miscellaneous is expanded by default and never has a scope.
+    expect(screen.queryByRole("button", { name: "Miscellaneous scope" })).toBeNull();
+    const panel = await openScope(user);
+    expect(nativeMock.loadScope).toHaveBeenCalledWith("project-1");
+    expect(screen.getByRole("button", { name: "Laundros scope" }).textContent).toContain("1/3");
+    expect(within(panel).getByText("Launch a booking site")).toBeTruthy();
+    expect(nativeMock.reconcileScope).not.toHaveBeenCalled();
+    await user.click(within(panel).getByRole("button", { name: "Close scope" }));
+    await screen.findByRole("button", { name: "Output type: Auto" });
+  });
+
+  it("opens a ready session, links it on send, and reviews the scope after the response", async () => {
+    const user = userEvent.setup(); render(<App />);
+    const panel = await openScope(user);
+    await user.click(within(panel).getByRole("button", { name: "Start: Write pricing copy" }));
+    const composer = await screen.findByRole("textbox", { name: "Message" }) as HTMLTextAreaElement;
+    expect(composer.value).toBe(prompt);
+    expect(screen.getByText("Session for “Write pricing copy” · Laundros")).toBeTruthy();
+    // Preparing the session saves nothing and contacts no model.
+    expect(nativeMock.createMessage).not.toHaveBeenCalled();
+    expect(nativeMock.stream).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(nativeMock.createMessage).toHaveBeenCalledWith(null, prompt, "auto", [], "item-1"));
+    await waitFor(() => expect(nativeMock.reconcileScope).toHaveBeenCalledWith("project-1", false));
+    expect(nativeMock.stream.mock.invocationCallOrder[0]).toBeLessThan(nativeMock.reconcileScope.mock.invocationCallOrder[0]);
+    expect(screen.queryByText("Session for “Write pricing copy” · Laundros")).toBeNull();
+    // A follow-up in the same conversation is an ordinary message.
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Shorter please");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(nativeMock.createMessage).toHaveBeenLastCalledWith("chat-1", "Shorter please", "auto"));
+    await waitFor(() => expect(nativeMock.reconcileScope).toHaveBeenCalledTimes(2));
+  });
+
+  it("sends an unlinked request after the scope link is removed or another chat is started", async () => {
+    const user = userEvent.setup(); render(<App />);
+    await user.click(within(await openScope(user)).getByRole("button", { name: "Start: Write pricing copy" }));
+    await user.click(await screen.findByRole("button", { name: "Remove scope link" }));
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(prompt);
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(nativeMock.createMessage).toHaveBeenCalledWith(null, prompt, "auto"));
+    await user.click(within(await openScope(user)).getByRole("button", { name: "Start: Write pricing copy" }));
+    await screen.findByText("Session for “Write pricing copy” · Laundros");
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+    expect(screen.queryByText("Session for “Write pricing copy” · Laundros")).toBeNull();
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("reviews an output only after its approved generation has been saved", async () => {
+    const siteSession = { ...conversation, projectId: "project-1" };
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...scoped, conversations: [siteSession] }); return siteSession; });
+    const user = userEvent.setup(); render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Build a website");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByText("Create this website?");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toHaveProperty("disabled", false));
+    expect(nativeMock.reconcileScope).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(nativeMock.reconcileScope).toHaveBeenCalledWith("project-1", false));
+    expect(nativeMock.generateWebsite.mock.invocationCallOrder[0]).toBeLessThan(nativeMock.reconcileScope.mock.invocationCallOrder[0]);
+  });
+
+  it("does not run the scope loop for a project without a scope or after a failed response", async () => {
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...scoped, scopes: [], conversations: [session] }); return session; });
+    const user = userEvent.setup(); const first = render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Plain question");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(nativeMock.stream).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send message" })).toBeTruthy());
+    expect(nativeMock.reconcileScope).not.toHaveBeenCalled();
+    first.unmount();
+    nativeMock.createMessage.mockImplementation(async () => { nativeMock.snapshot.mockResolvedValue({ ...scoped, conversations: [session] }); return session; });
+    nativeMock.stream.mockRejectedValue(new Error("OpenRouter took too long to respond. Retry when ready."));
+    render(<App />);
+    await screen.findByRole("button", { name: "Output type: Auto" });
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Plain question");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("button", { name: "Retry" });
+    expect(nativeMock.reconcileScope).not.toHaveBeenCalled();
+  });
 });

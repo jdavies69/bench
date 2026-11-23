@@ -7,8 +7,9 @@ import { OutputPicker } from "./components/OutputPicker";
 import { OpenRouterSetup } from "./components/OpenRouterSetup";
 import { AppUpdates } from "./components/AppUpdates";
 import { OpenRouterUsage } from "./components/OpenRouterUsage";
+import { ScopePanel } from "./components/ScopePanel";
 import { workspaceModules } from "./outputs/registry";
-import { native, type AttachmentMetadata, type ArtifactState, type ArtifactExportFormat, type TextArtifactContent, type WorkspaceState, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type Snapshot, type WebsiteState } from "./native";
+import { native, type AttachmentMetadata, type ArtifactState, type ArtifactExportFormat, type TextArtifactContent, type WorkspaceState, type ActionReview, type OutputDefinition, type WebsiteRevision, type ToolActivity, type ApprovalBehavior, type Conversation, type ExecutionBehavior, type Message, type OutputType, type Project, type ProviderId, type ScopeItem, type Snapshot, type WebsiteState } from "./native";
 import "./App.css";
 
 type IconName = "mark" | "plus" | "search" | "folder" | "chevron" | "arrow" | "panel" | "close";
@@ -131,9 +132,9 @@ function SettingsView({ snapshot, onClose, onSaveBehaviors, onRefresh, onError, 
     <section className="settings-section"><h2>About &amp; updates</h2>{version && <p className="quiet-note">Bench {version}</p>}<AppUpdates blocked={updateBlocked} /></section>
   </section>;
 }
-function Sidebar({ snapshot, collapsed, onToggle, expanded, setExpanded, current, selectedId, onNew, onSearch, onSelect, onSettings, onCreateProject }: {
+function Sidebar({ snapshot, collapsed, onToggle, expanded, setExpanded, current, selectedId, scopeProjectId, onNew, onSearch, onSelect, onScope, onSettings, onCreateProject }: {
   snapshot: Snapshot | null; collapsed: boolean; onToggle: () => void; expanded: Record<string, boolean>; setExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  current?: Conversation; selectedId: string | null; onNew: () => void; onSearch: () => void; onSelect: (id: string) => void; onSettings: () => void; onCreateProject: (name: string) => Promise<void>;
+  current?: Conversation; selectedId: string | null; scopeProjectId: string | null; onNew: () => void; onSearch: () => void; onSelect: (id: string) => void; onScope: (projectId: string) => void; onSettings: () => void; onCreateProject: (name: string) => Promise<void>;
 }) {
   const [newProject, setNewProject] = useState(false);
   const [projectName, setProjectName] = useState("");
@@ -146,7 +147,8 @@ function Sidebar({ snapshot, collapsed, onToggle, expanded, setExpanded, current
     <nav className="project-list" aria-label="Projects">{snapshot?.projects.map((project: Project) => {
       const chats = snapshot.conversations.filter((conversation) => conversation.projectId === project.id);
       const isExpanded = expanded[project.id] ?? false;
-      return <div className="project-group" key={project.id}><button className={`project-row tool-tip ${current?.projectId === project.id ? "project-active" : ""}`} data-tip={collapsed ? project.name : undefined} title={collapsed ? project.name : undefined} onClick={() => { if (collapsed) { if (chats[0]) onSelect(chats[0].id); else onToggle(); } else setExpanded((old) => ({ ...old, [project.id]: !isExpanded })); }} aria-label={project.name} aria-expanded={collapsed ? undefined : isExpanded}><span className="project-mark">{project.isSystem ? <Icon name="folder" size={16} /> : project.name.charAt(0).toUpperCase()}</span><span className="truncate rail-label">{project.name}</span><span className={`row-chevron rail-label ${isExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button>{!collapsed && isExpanded && chats.map((conversation) => <button key={conversation.id} className={`chat-row ${selectedId === conversation.id ? "chat-active" : ""}`} onClick={() => onSelect(conversation.id)} title={conversation.title}><span className="truncate">{conversation.title}</span></button>)}</div>;
+      const scope = snapshot.scopes.find((item) => item.projectId === project.id);
+      return <div className="project-group" key={project.id}><button className={`project-row tool-tip ${current?.projectId === project.id ? "project-active" : ""}`} data-tip={collapsed ? project.name : undefined} title={collapsed ? project.name : undefined} onClick={() => { if (collapsed) { if (chats[0]) onSelect(chats[0].id); else onToggle(); } else setExpanded((old) => ({ ...old, [project.id]: !isExpanded })); }} aria-label={project.name} aria-expanded={collapsed ? undefined : isExpanded}><span className="project-mark">{project.isSystem ? <Icon name="folder" size={16} /> : project.name.charAt(0).toUpperCase()}</span><span className="truncate rail-label">{project.name}</span><span className={`row-chevron rail-label ${isExpanded ? "expanded" : ""}`}><Icon name="chevron" size={13} /></span></button>{!collapsed && isExpanded && !project.isSystem && <button className={`chat-row scope-row ${scopeProjectId === project.id ? "chat-active" : ""}`} onClick={() => onScope(project.id)} aria-label={`${project.name} scope`}><span className="truncate">Scope</span>{scope && scope.pending > 0 && <span className="scope-dot" title="Changes to review" />}{scope && <span className="scope-count">{scope.done}/{scope.total}</span>}</button>}{!collapsed && isExpanded && chats.map((conversation) => <button key={conversation.id} className={`chat-row ${selectedId === conversation.id ? "chat-active" : ""}`} onClick={() => onSelect(conversation.id)} title={conversation.title}><span className="truncate">{conversation.title}</span></button>)}</div>;
     })}</nav>
     <div className="sidebar-footer"><button className="profile-button tool-tip" data-tip={collapsed ? "Settings" : undefined} onClick={onSettings} aria-label="Settings"><span className="avatar">B</span><span className="rail-label">Settings</span></button></div>
   </aside>;
@@ -177,7 +179,11 @@ function App() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ miscellaneous: true });
-  const [view, setView] = useState<"workspace" | "search" | "settings" | "setup">("workspace");
+  const [view, setView] = useState<"workspace" | "search" | "settings" | "setup" | "scope">("workspace");
+  const [scopeProjectId, setScopeProjectId] = useState<string | null>(null);
+  const [scopeLink, setScopeLink] = useState<{ itemId: string; title: string; projectName: string } | null>(null);
+  const scopeLinkRef = useRef<typeof scopeLink>(null);
+  const linkScope = (link: typeof scopeLink) => { scopeLinkRef.current = link; setScopeLink(link); };
   const connectionAttempt = useRef(0);
   const [setupReturn, setSetupReturn] = useState<"workspace" | "settings">("workspace");
   const [searchQuery, setSearchQuery] = useState("");
@@ -247,7 +253,7 @@ function App() {
     finally { attachmentWorking.current = false; setAttachmentBusy(false); }
   };
   const selectConversation = async (id: string) => {
-    discardStaging();
+    discardStaging(); linkScope(null);
     selectedRef.current = id; setSelectedId(id); setPendingReview(null); setResponse(""); setToolStatus(""); setFailedId(null); setError(""); setMessages([]); setToolActivity([]); setWebsite(null); setArtifact(null); setRevisions([]); setView("workspace"); setOutputOpen(true);
     try {
       const conversation = snapshot?.conversations.find((item) => item.id === id);
@@ -265,7 +271,14 @@ function App() {
       }
     } catch (e) { if (selectedRef.current === id) setError(errorText(e)); }
   };
-  const startNew = () => { discardStaging(); selectedRef.current = null; setPendingReview(null); setRevisions([]); setSelectedId(null); setMessages([]); setToolActivity([]); setResponse(""); setToolStatus(""); setDraft(""); setOutputType("auto"); setWebsite(null); setArtifact(null); setView("workspace"); setError(""); setFailedId(null); };
+  const startNew = () => { discardStaging(); linkScope(null); selectedRef.current = null; setPendingReview(null); setRevisions([]); setSelectedId(null); setMessages([]); setToolActivity([]); setResponse(""); setToolStatus(""); setDraft(""); setOutputType("auto"); setWebsite(null); setArtifact(null); setView("workspace"); setError(""); setFailedId(null); };
+  const startScopeSession = (item: ScopeItem, prompt: string, projectName: string) => { startNew(); setDraft(prompt); linkScope({ itemId: item.id, title: item.title, projectName }); };
+  // The scope loop runs after work finishes. Rust decides whether a model request is warranted.
+  const reviewScope = (latest: Snapshot, conversationId: string) => {
+    const projectId = latest.conversations.find((item) => item.id === conversationId)?.projectId;
+    if (!projectId || !latest.scopes.some((scope) => scope.projectId === projectId)) return;
+    void native.reconcileScope(projectId, false).then(() => refresh()).catch(() => {});
+  };
   const executeWebsite = async (conversationId: string, operation: "generate" | "restore", targetRevision?: number, token?: string) => {
     const site = operation === "restore" && targetRevision !== undefined
       ? await native.restoreWebsite(conversationId, targetRevision, token)
@@ -278,9 +291,10 @@ function App() {
     const review = await native.prepareWebsiteAction(conversationId, operation, targetRevision);
     if (review) {
       if (selectedRef.current === conversationId) setPendingReview({ review, operation, targetRevision });
-      return;
+      return false;
     }
     await executeWebsite(conversationId, operation, targetRevision);
+    return true;
   };
   const executeArtifact = async (conversationId: string, kind: OutputType, operation: "generate" | "restore" | "edit", targetRevision?: number, content?: TextArtifactContent, token?: string) => {
     const result = operation === "restore" && targetRevision !== undefined ? await native.restoreArtifact(conversationId, targetRevision, token)
@@ -293,13 +307,16 @@ function App() {
   };
   const requestArtifactAction = async (conversationId: string, kind: OutputType, operation: "generate" | "restore" | "edit", targetRevision?: number, content?: TextArtifactContent) => {
     const review = await native.prepareArtifactAction(conversationId, operation, targetRevision, content);
-    if (review) { if (selectedRef.current === conversationId) setPendingReview({ review, operation, targetRevision, artifactKind: kind, content }); return; }
+    if (review) { if (selectedRef.current === conversationId) setPendingReview({ review, operation, targetRevision, artifactKind: kind, content }); return false; }
     await executeArtifact(conversationId, kind, operation, targetRevision, content);
+    return true;
   };
-  const runOutput = async (conversation: Conversation) => {
-    if (conversation.outputType === "website") { if (selectedRef.current === conversation.id) setOutputOpen(true); await requestWebsiteAction(conversation.id, "generate"); }
-    else if (isArtifact(conversation.outputType)) { if (selectedRef.current === conversation.id) setOutputOpen(true); await requestArtifactAction(conversation.id, conversation.outputType, "generate"); }
-    else if (conversation.outputType === "chat") await native.stream(conversation.id, (event) => { if (selectedRef.current !== conversation.id) return; if (event.kind === "delta") setResponse((old) => old + event.text); if (event.kind === "tool") setToolStatus(event.text); });
+  /** Resolves true once the work exists; false while it waits for the user's approval. */
+  const runOutput = async (conversation: Conversation): Promise<boolean> => {
+    if (conversation.outputType === "website") { if (selectedRef.current === conversation.id) setOutputOpen(true); return requestWebsiteAction(conversation.id, "generate"); }
+    if (isArtifact(conversation.outputType)) { if (selectedRef.current === conversation.id) setOutputOpen(true); return requestArtifactAction(conversation.id, conversation.outputType, "generate"); }
+    if (conversation.outputType === "chat") await native.stream(conversation.id, (event) => { if (selectedRef.current !== conversation.id) return; if (event.kind === "delta") setResponse((old) => old + event.text); if (event.kind === "tool") setToolStatus(event.text); });
+    return true;
   };
   const approvePendingAction = async () => {
     if (!pendingReview || busy) return;
@@ -309,7 +326,8 @@ function App() {
       const token = await native.approveAction(pending.review.id);
       if (pending.artifactKind) await executeArtifact(pending.review.conversationId, pending.artifactKind, pending.operation, pending.targetRevision, pending.content, token);
       else if (pending.operation !== "edit") await executeWebsite(pending.review.conversationId, pending.operation, pending.targetRevision, token);
-      await refresh();
+      const latest = await refresh();
+      if (pending.operation === "generate") reviewScope(latest, pending.review.conversationId);
     } catch (e) {
       if (selectedRef.current === pending.review.conversationId) {
         if (pending.operation === "generate") { setFailedId(pending.review.conversationId); setFailedReason(responseError(e)); }
@@ -351,10 +369,13 @@ function App() {
     const files = [...stagedAttachments.current];
     savingAttachments.current = new Set(files.map((file) => file.id));
     const request = draft.trim();
+    const link = origin === null ? scopeLinkRef.current : null;
     setBusy(true); setBusyId(origin); setPendingReview(null); setError(""); setResponse(""); setToolStatus(""); setFailedId(null);
     let created: Conversation | null = null;
     try {
-      created = files.length ? await native.createMessage(origin, request, outputType, files.map((file) => file.id)) : await native.createMessage(origin, request, outputType);
+      created = link ? await native.createMessage(origin, request, outputType, files.map((file) => file.id), link.itemId)
+        : files.length ? await native.createMessage(origin, request, outputType, files.map((file) => file.id)) : await native.createMessage(origin, request, outputType);
+      if (scopeLinkRef.current === link) linkScope(null);
       savingAttachments.current.clear();
       if (attachmentEpoch.current === composerEpoch) updateAttachments([]);
       setBusyId(created.id);
@@ -369,10 +390,11 @@ function App() {
         if (selectedRef.current === created.id) { setFailedId(created.id); setFailedReason("Request saved. Connect a provider in Settings to continue."); }
         return;
       }
-      await runOutput(created);
+      const finished = await runOutput(created);
       const loaded = await native.messages(created.id);
       if (selectedRef.current === created.id) { setMessages(loaded); setToolActivity(await native.toolActivity(created.id)); setToolStatus(""); setResponse(""); }
-      await refresh();
+      const latest = await refresh();
+      if (finished) reviewScope(latest, created.id);
     } catch (e) {
       if (created) { if (selectedRef.current === created.id) { setFailedId(created.id); setFailedReason(responseError(e)); setResponse(""); } }
       else if (selectedRef.current === origin && attachmentEpoch.current === composerEpoch) setError("Couldn’t save your message. Your draft is still here.");
@@ -387,7 +409,7 @@ function App() {
     const conversation = snapshot.conversations.find((item) => item.id === failedId); if (!conversation) return;
     if (!ensureConnection(true)) return;
     setBusy(true); setBusyId(conversation.id); setPendingReview(null); setResponse(""); setToolStatus(""); setFailedId(null);
-    try { await runOutput(conversation); if (selectedRef.current === conversation.id) { setMessages(await native.messages(conversation.id)); setToolActivity(await native.toolActivity(conversation.id)); setToolStatus(""); setResponse(""); } await refresh(); } catch (e) { if (selectedRef.current === conversation.id) { setToolActivity(await native.toolActivity(conversation.id).catch(() => [])); setToolStatus(""); setFailedId(conversation.id); setFailedReason(responseError(e)); setResponse(""); } } finally { setBusy(false); setBusyId(null); }
+    try { const finished = await runOutput(conversation); if (selectedRef.current === conversation.id) { setMessages(await native.messages(conversation.id)); setToolActivity(await native.toolActivity(conversation.id)); setToolStatus(""); setResponse(""); } const latest = await refresh(); if (finished) reviewScope(latest, conversation.id); } catch (e) { if (selectedRef.current === conversation.id) { setToolActivity(await native.toolActivity(conversation.id).catch(() => [])); setToolStatus(""); setFailedId(conversation.id); setFailedReason(responseError(e)); setResponse(""); } } finally { setBusy(false); setBusyId(null); }
   };
   const saveSettings = async (execution: ExecutionBehavior, approval: ApprovalBehavior) => { try { await native.settings(execution, approval); await refresh(); setError(""); } catch (e) { setError(errorText(e)); } };
   const toggleSidebar = () => { const next = !collapsed; setCollapsed(next); native.setSidebarCollapsed(next).then((settings) => setSnapshot((old) => old ? { ...old, settings } : old)).catch((e) => { setCollapsed(!next); setError(errorText(e)); }); };
@@ -396,11 +418,12 @@ function App() {
   const current = snapshot?.conversations.find((conversation) => conversation.id === selectedId);
   useEffect(() => { if (current && lastProject.current?.id === current.id && lastProject.current.projectId !== current.projectId) { setProjectChanging(true); const timer = window.setTimeout(() => setProjectChanging(false), 320); lastProject.current = { id: current.id, projectId: current.projectId }; return () => window.clearTimeout(timer); } lastProject.current = current ? { id: current.id, projectId: current.projectId } : null; }, [current?.id, current?.projectId]);
   const activeBusy = busy && busyId === selectedId;
+  const scopeProject = snapshot?.projects.find((project) => project.id === scopeProjectId && !project.isSystem);
   const hasOutput = !!current && current.outputType !== "chat" && current.outputType !== "auto";
   return <div className="app-shell" onPointerMove={moveGrid} onPointerLeave={leaveGrid}><div className="drag-strip" data-tauri-drag-region aria-hidden="true" />
-    <Sidebar snapshot={snapshot} collapsed={collapsed} onToggle={toggleSidebar} expanded={expanded} setExpanded={setExpanded} current={current} selectedId={selectedId} onNew={startNew} onSearch={() => { setView("search"); setSearchQuery(""); }} onSelect={(id) => void selectConversation(id)} onSettings={() => setView("settings")} onCreateProject={addProject} />
+    <Sidebar snapshot={snapshot} collapsed={collapsed} onToggle={toggleSidebar} expanded={expanded} setExpanded={setExpanded} current={current} selectedId={selectedId} scopeProjectId={view === "scope" ? scopeProjectId : null} onNew={startNew} onSearch={() => { setView("search"); setSearchQuery(""); }} onSelect={(id) => void selectConversation(id)} onScope={(projectId) => { setScopeProjectId(projectId); setView("scope"); setError(""); }} onSettings={() => setView("settings")} onCreateProject={addProject} />
     <main className={`main-area ${collapsed ? "with-rail" : "with-sidebar"}`}>
-      {view === "workspace" && !selectedId && <div className="empty-workspace"><Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered definitions={snapshot?.outputs ?? []} attachments={attachments} onAttach={() => void chooseAttachments()} onRemoveAttachment={(id) => void removeAttachment(id)} attachmentBusy={attachmentBusy} /></div>}
+      {view === "workspace" && !selectedId && <div className={`empty-workspace ${scopeLink ? "has-scope-link" : ""}`}>{scopeLink && <div className="scope-link"><span className="truncate">Session for “{scopeLink.title}” · {scopeLink.projectName}</span><button type="button" onClick={() => linkScope(null)} aria-label="Remove scope link"><Icon name="close" size={12} /></button></div>}<Composer value={draft} onChange={setDraft} onSend={send} busy={busy} outputType={outputType} setOutputType={setOutputType} centered definitions={snapshot?.outputs ?? []} attachments={attachments} onAttach={() => void chooseAttachments()} onRemoveAttachment={(id) => void removeAttachment(id)} attachmentBusy={attachmentBusy} /></div>}
       {view === "workspace" && selectedId && <div className={`adaptive-workspace ${hasOutput && outputOpen ? "has-output" : ""}`}>
         <div className="conversation-view"><div className="message-scroll"><div className={`message-stack ${projectChanging ? "project-changing" : ""}`}>
           <header className="conversation-header"><span className="conversation-title">{current?.title}</span><label className="project-picker"><span className="sr-only">Project</span><select value={current?.projectId ?? "miscellaneous"} onChange={(event) => void moveCurrent(event.target.value)} aria-label="Move conversation to project">{snapshot?.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><Icon name="chevron" size={13} /></label>{hasOutput && !outputOpen && <button className="show-output" onClick={() => setOutputOpen(true)}>Show {outputName(current.outputType)}</button>}</header>
@@ -415,6 +438,7 @@ function App() {
         {hasOutput && outputOpen && <OutputWorkspace conversationId={current.id} type={current.outputType} state={current.outputType === "website" && website ? { ...website, kind: "website" } : artifact} revisions={revisions} busy={activeBusy} onClose={() => setOutputOpen(false)} onRestore={(revision) => void restoreWebsite(revision)} onExport={(format) => void exportArtifact(format)} onEdit={(content) => void editArtifact(content)} />}
       </div>}
       {view === "search" && <section className="utility-panel search-panel"><div className="panel-top"><h1>Search</h1><button className="icon-button" onClick={() => setView("workspace")} aria-label="Close search"><Icon name="close" /></button></div><div className="search-input-wrap"><Icon name="search" size={19} /><input autoFocus placeholder="Search conversations" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} aria-label="Search conversations" /></div><div className="search-results">{searchResults.map((conversation) => <button key={conversation.id} className="search-result" onClick={() => void selectConversation(conversation.id)}><span>{conversation.title}</span><small>{snapshot?.projects.find((project) => project.id === conversation.projectId)?.name ?? "Miscellaneous"}</small></button>)}{searchQuery && searchResults.length === 0 && <p className="quiet-note">No conversations found.</p>}</div></section>}
+      {view === "scope" && scopeProject && <ScopePanel key={scopeProject.id} project={scopeProject} busy={busy} onClose={() => setView("workspace")} onStart={(item, prompt) => startScopeSession(item, prompt, scopeProject.name)} onOpen={(id) => void selectConversation(id)} onChanged={() => void refresh().catch(() => {})} onError={setError} />}
       {view === "setup" && <OpenRouterSetup onCancelConnect={() => { connectionAttempt.current++; return native.cancelOpenRouterConnect(); }} onConnect={async () => { const attempt = ++connectionAttempt.current; await native.connectOpenRouter(); if (attempt !== connectionAttempt.current) return; const next = await refresh(); if (attempt !== connectionAttempt.current) return; if (!next.providers.some((provider) => provider.id === "openrouter" && provider.keySource !== "none")) throw new Error("Connection not saved"); setView(setupReturn); setError(""); }} onDismiss={() => { setView(setupReturn); setError(""); }} />}
       {view === "settings" && snapshot && <SettingsView snapshot={snapshot} onClose={() => setView("workspace")} onSaveBehaviors={(execution, approval) => void saveSettings(execution, approval)} onRefresh={async () => { await refresh(); }} onError={setError} updateBlocked={busy || attachmentBusy || attachments.length > 0 || !!draft.trim()} onSetupOpenRouter={() => { setSetupReturn("settings"); setView("setup"); setError(""); }} />}
       {error && <div className="error-toast" role="alert"><span>{error}</span><button onClick={() => setError("")} aria-label="Dismiss error"><Icon name="close" size={15} /></button></div>}

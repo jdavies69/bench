@@ -12,7 +12,16 @@ export interface AttachmentMetadata { id: string; name: string; bytes: number; }
 export interface Message { id: string; conversationId: string; role: "user" | "assistant"; content: string; createdAt: string; attachments?: AttachmentMetadata[]; }
 export interface Settings { executionBehavior: ExecutionBehavior; approvalBehavior: ApprovalBehavior; modelProvider: ProviderId; sidebarCollapsed: boolean; webSearchBackend: WebSearchBackend; webSearchUrl: string; }
 export interface ProviderStatus { id: ProviderId; label: string; model: string; keySource: "keychain" | "environment" | "none"; }
-export interface Snapshot { outputs: OutputDefinition[]; projects: Project[]; conversations: Conversation[]; settings: Settings; providers: ProviderStatus[]; webSearchKeySource: "keychain" | "environment" | "none"; webSearchStatus: "openrouter" | "unavailable" | "off"; }
+export interface ScopeSummary { projectId: string; done: number; total: number; pending: number; }
+export interface Snapshot { outputs: OutputDefinition[]; projects: Project[]; conversations: Conversation[]; settings: Settings; providers: ProviderStatus[]; webSearchKeySource: "keychain" | "environment" | "none"; webSearchStatus: "openrouter" | "unavailable" | "off"; scopes: ScopeSummary[]; }
+export interface ScopeSession { conversationId: string; title: string; }
+export interface ScopeItem { id: string; title: string; doneWhen: string; area: string; status: "todo" | "doing" | "done"; bucket: "scope" | "later"; origin: "user" | "suggested"; sessions: ScopeSession[]; }
+/** A suggestion from the update loop. It changes nothing until the user answers it. */
+export interface ScopeChange { id: string; kind: "add" | "complete" | "reconsider"; fit: "needed" | "extra" | ""; itemId: string | null; title: string; area: string; doneWhen: string; reason: string; conversationId: string | null; conversationTitle: string | null; createdAt: string; }
+export interface ScopeProgress { inScope: number; done: number; doing: number; later: number; dropped: number; percent: number; addedWeek: number; doneWeek: number; areas: { name: string; done: number; total: number }[]; }
+export interface ScopeState { projectId: string; outcome: string; autoUpdate: boolean; lastRunAt: string | null; lastRunStatus: "" | "ok" | "failed"; stale: boolean; progress: ScopeProgress; items: ScopeItem[]; changes: ScopeChange[]; }
+export type ScopeDecision = "accept" | "later" | "dismiss";
+export type ScopeItemChange = { title?: string; doneWhen?: string; status?: ScopeItem["status"]; bucket?: ScopeItem["bucket"] | "dropped" };
 export interface StreamEvent { kind: "delta" | "done" | "tool"; text: string; }
 export interface ToolActivity { id: string; userMessageId: string | null; toolName: string; status: string; summary: string; }
 export interface OutputDefinition { id: Exclude<OutputType, "auto">; label: string; implemented: boolean; workspace: "conversation" | "canvas"; }
@@ -44,8 +53,8 @@ export const native = {
   toolActivity: (conversationId: string) => invoke<ToolActivity[]>("load_tool_activity", { conversationId }),
   chooseAttachments: () => invoke<AttachmentMetadata[]>("choose_attachments"),
   removeStagedAttachment: (attachmentId: string) => invoke<void>("remove_staged_attachment", { attachmentId }),
-  createMessage: (conversationId: string | null, content: string, outputType: OutputType, attachmentIds: string[] = []) =>
-    invoke<Conversation>("create_user_message", { conversationId, content, outputType, attachmentIds }),
+  createMessage: (conversationId: string | null, content: string, outputType: OutputType, attachmentIds: string[] = [], scopeItemId?: string) =>
+    invoke<Conversation>("create_user_message", { conversationId, content, outputType, attachmentIds, scopeItemId }),
   stream: (conversationId: string, onEvent: (event: StreamEvent) => void) => {
     const channel = new Channel<StreamEvent>();
     channel.onmessage = onEvent;
@@ -87,4 +96,13 @@ export const native = {
   restoreWebsite: (conversationId: string, revision: number, approvalToken?: string) => invoke<WebsiteState>("restore_website_revision", { conversationId, revision, approvalToken }),
   prepareWebsiteAction: (conversationId: string, operation: "generate" | "restore", targetRevision?: number) => invoke<ActionReview | null>("prepare_website_action", { conversationId, operation, targetRevision }),
   approveAction: (reviewId: string) => invoke<string>("approve_action", { reviewId }),
+  loadScope: (projectId: string) => invoke<ScopeState | null>("load_scope", { projectId }),
+  setScopeOutcome: (projectId: string, outcome: string) => invoke<ScopeState>("set_scope_outcome", { projectId, outcome }),
+  setScopeAutoUpdate: (projectId: string, enabled: boolean) => invoke<ScopeState>("set_scope_auto_update", { projectId, enabled }),
+  addScopeItem: (projectId: string, title: string, bucket: ScopeItem["bucket"]) => invoke<ScopeState>("add_scope_item", { projectId, title, bucket }),
+  updateScopeItem: (itemId: string, change: ScopeItemChange) => invoke<ScopeState>("update_scope_item", { itemId, ...change }),
+  resolveScopeChange: (changeId: string, decision: ScopeDecision) => invoke<ScopeState>("resolve_scope_change", { changeId, decision }),
+  scopeSessionPrompt: (itemId: string) => invoke<string>("scope_session_prompt", { itemId }),
+  /** Reviews new project activity. Without `force`, Rust decides whether a model request is warranted. */
+  reconcileScope: (projectId: string, force: boolean) => invoke<ScopeState>("reconcile_scope", { projectId, force }),
 };

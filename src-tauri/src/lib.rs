@@ -17,6 +17,8 @@ mod oauth;
 mod output;
 mod policy;
 mod provider;
+mod scope;
+mod scope_commands;
 mod text_outputs;
 mod tools;
 mod updates;
@@ -93,6 +95,14 @@ pub fn run() {
             commands::restore_website_revision,
             commands::prepare_website_action,
             commands::approve_action,
+            scope_commands::load_scope,
+            scope_commands::set_scope_outcome,
+            scope_commands::set_scope_auto_update,
+            scope_commands::add_scope_item,
+            scope_commands::update_scope_item,
+            scope_commands::resolve_scope_change,
+            scope_commands::scope_session_prompt,
+            scope_commands::reconcile_scope,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
